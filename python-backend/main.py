@@ -37,6 +37,28 @@ for directory in [UPLOAD_DIR, PROCESSED_DIR, TEMP_DIR]:
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.mount("/processed", StaticFiles(directory="processed"), name="processed")
 
+# Serve React frontend
+app.mount("/static", StaticFiles(directory="../dist/assets"), name="static")
+app.mount("/assets", StaticFiles(directory="../dist/assets"), name="assets")
+
+# Serve React app for all other routes
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
+
+@app.get("/{full_path:path}")
+async def serve_react_app(full_path: str):
+    # If it's an API route, let it pass through
+    if full_path.startswith("api/"):
+        return {"error": "API route not found"}
+    
+    # Serve React app for all other routes
+    dist_path = "../dist/index.html"
+    if os.path.exists(dist_path):
+        return FileResponse(dist_path)
+    else:
+        return {"message": "Frontend not built yet. Run 'npm run build' first."}
+
 # Include routers
 app.include_router(health.router, prefix="/api", tags=["Health"])
 app.include_router(video.router, prefix="/api/video", tags=["Video"])

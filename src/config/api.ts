@@ -1,9 +1,9 @@
 // API Configuration for Python Backend
 export const API_CONFIG = {
   // Update this with your Railway backend URL after deployment
-  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  BASE_URL: import.meta.env.VITE_API_URL || 'https://your-app.railway.app',
   TIMEOUT: 30000, // 30 seconds
-  WS_URL: import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
+  WS_URL: import.meta.env.VITE_WS_URL || 'wss://your-app.railway.app/ws'
 }
 
 // API Endpoints

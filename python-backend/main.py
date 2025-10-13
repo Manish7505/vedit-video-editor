@@ -41,6 +41,17 @@ app.mount("/processed", StaticFiles(directory="processed"), name="processed")
 app.mount("/static", StaticFiles(directory="../dist/assets"), name="static")
 app.mount("/assets", StaticFiles(directory="../dist/assets"), name="assets")
 
+# Root health check for Railway
+@app.get("/")
+async def root():
+    return {"message": "VEdit AI Video Editor Backend", "status": "running"}
+
+# Include routers (must be before catch-all route)
+app.include_router(health.router, prefix="/api", tags=["Health"])
+app.include_router(video.router, prefix="/api/video", tags=["Video"])
+app.include_router(ai.router, prefix="/api/ai", tags=["AI"])
+app.include_router(files.router, prefix="/api/files", tags=["Files"])
+
 # Serve React app for all other routes
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -72,12 +83,6 @@ async def serve_react_app(full_path: str):
         "health": "/api/health",
         "note": "Frontend will be available after build"
     }
-
-# Include routers
-app.include_router(health.router, prefix="/api", tags=["Health"])
-app.include_router(video.router, prefix="/api/video", tags=["Video"])
-app.include_router(ai.router, prefix="/api/ai", tags=["AI"])
-app.include_router(files.router, prefix="/api/files", tags=["Files"])
 
 # WebSocket connection manager
 class ConnectionManager:

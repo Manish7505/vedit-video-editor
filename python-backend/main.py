@@ -53,11 +53,25 @@ async def serve_react_app(full_path: str):
         return {"error": "API route not found"}
     
     # Serve React app for all other routes
-    dist_path = "../dist/index.html"
-    if os.path.exists(dist_path):
-        return FileResponse(dist_path)
-    else:
-        return {"message": "Frontend not built yet. Run 'npm run build' first."}
+    # Try different possible paths for the built frontend
+    possible_paths = [
+        "../dist/index.html",
+        "dist/index.html", 
+        "./dist/index.html",
+        "/app/dist/index.html"
+    ]
+    
+    for dist_path in possible_paths:
+        if os.path.exists(dist_path):
+            return FileResponse(dist_path)
+    
+    # If no frontend found, return a simple message
+    return {
+        "message": "VEdit Backend API is running!",
+        "docs": "/docs",
+        "health": "/api/health",
+        "note": "Frontend will be available after build"
+    }
 
 # Include routers
 app.include_router(health.router, prefix="/api", tags=["Health"])

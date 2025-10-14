@@ -41,12 +41,7 @@ app.mount("/processed", StaticFiles(directory="processed"), name="processed")
 # app.mount("/static", StaticFiles(directory="../dist/assets"), name="static")
 # app.mount("/assets", StaticFiles(directory="../dist/assets"), name="assets")
 
-# Root health check for Railway
-@app.get("/")
-async def root():
-    return {"message": "VEdit AI Video Editor Backend", "status": "running"}
-
-# Include routers (must be before catch-all route)
+# Include routers
 app.include_router(health.router, prefix="/api", tags=["Health"])
 app.include_router(video.router, prefix="/api/video", tags=["Video"])
 app.include_router(ai.router, prefix="/api/ai", tags=["AI"])

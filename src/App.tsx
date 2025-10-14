@@ -5,8 +5,8 @@ import HomePage from './pages/HomePage'
 import VideoEditor from './pages/VideoEditor'
 import Dashboard from './components/Dashboard'
 import { VideoEditorProvider } from './contexts/VideoEditorContext'
-import VAPIAssistant from './components/VAPIAssistant'
-import BeautifulVAPIAssistant from './components/BeautifulVAPIAssistant'
+// import VAPIAssistant from './components/VAPIAssistant'
+// import BeautifulVAPIAssistant from './components/BeautifulVAPIAssistant'
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -89,11 +89,11 @@ function App() {
           }}
         />
         
-        {/* Beautiful VAPI AI Assistant - Like AKOOL */}
-        <BeautifulVAPIAssistant 
+        {/* VAPI AI Assistant - Disabled (requires API keys) */}
+        {/* <BeautifulVAPIAssistant 
           workflowId={import.meta.env.VITE_VAPI_WORKFLOW_ID || ''}
           position="bottom-right"
-        />
+        /> */}
       </div>
   )
 }

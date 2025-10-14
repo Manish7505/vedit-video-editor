@@ -37,9 +37,9 @@ for directory in [UPLOAD_DIR, PROCESSED_DIR, TEMP_DIR]:
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.mount("/processed", StaticFiles(directory="processed"), name="processed")
 
-# Serve React frontend
-app.mount("/static", StaticFiles(directory="../dist/assets"), name="static")
-app.mount("/assets", StaticFiles(directory="../dist/assets"), name="assets")
+# Serve React frontend (disabled for now - enable after deployment works)
+# app.mount("/static", StaticFiles(directory="../dist/assets"), name="static")
+# app.mount("/assets", StaticFiles(directory="../dist/assets"), name="assets")
 
 # Root health check for Railway
 @app.get("/")
@@ -52,37 +52,26 @@ app.include_router(video.router, prefix="/api/video", tags=["Video"])
 app.include_router(ai.router, prefix="/api/ai", tags=["AI"])
 app.include_router(files.router, prefix="/api/files", tags=["Files"])
 
-# Serve React app for all other routes
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import os
+# Serve React frontend (optional - enable after backend is working)
+# from fastapi.staticfiles import StaticFiles
+# from fastapi.responses import FileResponse
+# import os
 
-@app.get("/{full_path:path}")
-async def serve_react_app(full_path: str):
-    # If it's an API route, let it pass through
-    if full_path.startswith("api/"):
-        return {"error": "API route not found"}
-    
-    # Serve React app for all other routes
-    # Try different possible paths for the built frontend
-    possible_paths = [
-        "../dist/index.html",
-        "dist/index.html", 
-        "./dist/index.html",
-        "/app/dist/index.html"
-    ]
-    
-    for dist_path in possible_paths:
-        if os.path.exists(dist_path):
-            return FileResponse(dist_path)
-    
-    # If no frontend found, return a simple message
-    return {
-        "message": "VEdit Backend API is running!",
-        "docs": "/docs",
-        "health": "/api/health",
-        "note": "Frontend will be available after build"
-    }
+# @app.get("/{full_path:path}")
+# async def serve_react_app(full_path: str):
+#     # Serve React app for all other routes
+#     possible_paths = [
+#         "../dist/index.html",
+#         "dist/index.html", 
+#         "./dist/index.html",
+#         "/app/dist/index.html"
+#     ]
+#     
+#     for dist_path in possible_paths:
+#         if os.path.exists(dist_path):
+#             return FileResponse(dist_path)
+#     
+#     return {"message": "Backend API is running", "docs": "/docs"}
 
 # WebSocket connection manager
 class ConnectionManager:

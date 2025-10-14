@@ -7,34 +7,10 @@ router = APIRouter()
 
 @router.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    
-    # Check FFmpeg availability
-    ffmpeg_available = False
-    try:
-        result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True, timeout=5)
-        ffmpeg_available = result.returncode == 0
-    except:
-        pass
-    
-    # Check Whisper availability
-    whisper_available = False
-    try:
-        import whisper
-        whisper_available = True
-    except:
-        pass
-    
+    """Health check endpoint - simple and fast"""
     return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "python_version": sys.version,
-        "services": {
-            "ffmpeg": "available" if ffmpeg_available else "unavailable",
-            "whisper": "available" if whisper_available else "unavailable",
-            "moviepy": "available",
-            "api": "running"
-        }
+        "status": "ok",
+        "message": "VEdit Backend is healthy"
     }
 
 @router.get("/status")

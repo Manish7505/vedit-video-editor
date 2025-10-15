@@ -2,10 +2,13 @@
 nixPkgs = ["nodejs", "npm", "ffmpeg"]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = ["npm ci --include=dev"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = ["chmod +x railway-build.sh && ./railway-build.sh"]
 
 [start]
 cmd = "npm start"
+
+[variables]
+NODE_ENV = "production"

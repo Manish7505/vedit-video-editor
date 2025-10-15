@@ -1,7 +1,7 @@
-# Multi-stage build for production
-FROM node:18-alpine AS builder
+# Use Node.js 18 Alpine for smaller image size
+FROM node:18-alpine
 
-# Install FFmpeg for video processing
+# Install FFmpeg
 RUN apk add --no-cache ffmpeg
 
 # Set working directory
@@ -12,8 +12,10 @@ COPY package*.json ./
 COPY server/package*.json ./server/
 
 # Install dependencies
-RUN npm ci --only=production
-RUN cd server && npm ci --only=production
+RUN npm install
+
+# Install server dependencies
+RUN cd server && npm install
 
 # Copy source code
 COPY . .
@@ -21,25 +23,8 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Production stage
-FROM node:18-alpine AS production
+# Expose port
+EXPOSE 8080
 
-# Install FFmpeg for video processing
-RUN apk add --no-cache ffmpeg
-
-WORKDIR /app
-
-# Copy built application
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/server ./server
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/server/node_modules ./server/node_modules
-
-# Create uploads directory
-RUN mkdir -p uploads/videos uploads/audio uploads/images uploads/proxies
-
-# Expose ports
-EXPOSE 3000 5001
-
-# Start both frontend and backend
-CMD ["sh", "-c", "npm run start & cd server && npm start"]
+# Start the application
+CMD ["npm", "start"]

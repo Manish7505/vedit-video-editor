@@ -11,8 +11,8 @@ WORKDIR /app
 COPY package*.json ./
 COPY server/package*.json ./server/
 
-# Install dependencies
-RUN npm install
+# Install dependencies (including dev dependencies for build)
+RUN npm install --include=dev
 
 # Install server dependencies
 RUN cd server && npm install

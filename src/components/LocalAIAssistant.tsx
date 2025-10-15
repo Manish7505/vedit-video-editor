@@ -147,8 +147,8 @@ const LocalAIAssistant = ({ isOpen, onClose, isInSidebar = false }: { isOpen: bo
       
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        type: 'assistant',
-        content: `${randomResponse}\n\nI can help you with:\n\n• **Video Editing**: Cut, trim, split, and arrange clips\n• **Audio Control**: Adjust volume, add music, sync audio\n• **Effects**: Apply filters, transitions, and visual effects\n• **Timeline Management**: Organize tracks and manage timing\n• **Export Options**: Choose formats and quality settings\n\nWhat would you like to do with your video?`,
+        type: 'ai',
+        content: `${randomResponse}\n\nI can help with video editing, effects, audio, and timeline management. What would you like to do?`,
         timestamp: new Date()
       }
 
@@ -587,12 +587,12 @@ const LocalAIAssistant = ({ isOpen, onClose, isInSidebar = false }: { isOpen: bo
                     <h3 className={`font-semibold mb-3 ${isInSidebar ? 'text-white' : 'text-gray-900'}`}>Generated Script</h3>
                     <div className={`p-4 rounded-lg max-h-60 overflow-y-auto custom-scrollbar ${isInSidebar ? 'bg-zinc-800' : 'bg-gray-50'}`}>
                       <h4 className={`font-medium mb-2 ${isInSidebar ? 'text-white' : 'text-gray-900'}`}>{script.title}</h4>
-                      <p className={`text-sm mb-4 ${isInSidebar ? 'text-gray-300' : 'text-gray-600'}`}>{script.description}</p>
+                      <p className={`text-sm mb-4 ${isInSidebar ? 'text-gray-300' : 'text-gray-600'}`}>{script.hook}</p>
                       <div className={`text-sm whitespace-pre-wrap ${isInSidebar ? 'text-white' : 'text-gray-800'}`}>
-                        {script.content}
+                        {script.sections.map((section, idx) => section.content).join('\n\n')}
                       </div>
                       <button
-                        onClick={() => copyToClipboard(script.content)}
+                        onClick={() => copyToClipboard(script.sections.map(section => section.content).join('\n\n'))}
                         className="mt-3 text-xs text-blue-500 hover:text-blue-400 flex items-center gap-1"
                       >
                         <Copy className="w-3 h-3" />
@@ -612,10 +612,10 @@ const LocalAIAssistant = ({ isOpen, onClose, isInSidebar = false }: { isOpen: bo
                           <p className={`text-sm ${isInSidebar ? 'text-gray-300' : 'text-gray-600'}`}>{idea.description}</p>
                           <div className="flex items-center gap-2 mt-2">
                             <span className={`text-xs px-2 py-1 rounded ${isInSidebar ? 'bg-zinc-700 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>
-                              {idea.category}
+                              {idea.difficulty}
                             </span>
                             <span className={`text-xs px-2 py-1 rounded ${isInSidebar ? 'bg-zinc-700 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>
-                              {idea.difficulty}
+                              {idea.estimatedViews}
                             </span>
                           </div>
                         </div>

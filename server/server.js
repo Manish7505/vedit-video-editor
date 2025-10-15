@@ -12,6 +12,8 @@ const userRoutes = require('./routes/users');
 const projectRoutes = require('./routes/projects');
 const fileRoutes = require('./routes/files');
 const aiRoutes = require('./routes/ai');
+const renderRoutes = require('./routes/render');
+const renderQueueRoutes = require('./routes/renderQueue');
 
 // Import middleware
 const { errorHandler } = require('./middleware/errorHandler');
@@ -44,6 +46,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Removed proxy static mount
 
 // Routes
 // Note: auth routes are no longer needed with Clerk
@@ -51,6 +54,12 @@ app.use('/api/users', userRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/ai', aiRoutes);
+// Static hosting for rendered files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Mount render routes so POST /api/render works
+app.use('/api', renderRoutes);
+app.use('/api', renderQueueRoutes);
+// Removed API proxy routes
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -119,8 +128,7 @@ app.use('*', (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
-
+const PORT = Number(process.env.PORT || 5000);
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📱 Frontend URL: ${process.env.FRONTEND_URL || "http://localhost:3003"}`);

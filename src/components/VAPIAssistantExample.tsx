@@ -113,8 +113,6 @@ const VAPIAssistantExample: React.FC = () => {
         <VAPIAssistant 
           workflowId={workflowId}
           position={position}
-          theme={theme}
-          size={size}
         />
       )}
     </div>

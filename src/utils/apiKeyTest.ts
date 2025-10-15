@@ -19,5 +19,5 @@ export const testApiKey = () => {
 // Test OpenAI API key format
 export const validateOpenAIKey = (key: string): boolean => {
   // OpenAI API keys should start with 'sk-' and be around 50+ characters
-  return key && key.startsWith('sk-') && key.length > 40
+  return Boolean(key && key.startsWith('sk-') && key.length > 40)
 }

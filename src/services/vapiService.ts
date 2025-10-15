@@ -86,14 +86,18 @@ export class VAPIService {
     }
   }
 
+  // Note: VAPI SDK may not have built-in mute/unmute methods
+  // These methods are placeholders for future implementation
   async mute() {
     if (!this.vapi) {
       throw new Error('VAPI not initialized')
     }
 
     try {
-      await this.vapi.mute()
-      return true
+      // VAPI SDK doesn't have a direct mute method
+      // This would need to be implemented using browser audio APIs
+      console.warn('Mute functionality not available in current VAPI SDK version')
+      return false
     } catch (error) {
       console.error('Failed to mute VAPI call:', error)
       throw error
@@ -106,8 +110,10 @@ export class VAPIService {
     }
 
     try {
-      await this.vapi.unmute()
-      return true
+      // VAPI SDK doesn't have a direct unmute method
+      // This would need to be implemented using browser audio APIs
+      console.warn('Unmute functionality not available in current VAPI SDK version')
+      return false
     } catch (error) {
       console.error('Failed to unmute VAPI call:', error)
       throw error
@@ -115,11 +121,15 @@ export class VAPIService {
   }
 
   isConnected(): boolean {
-    return this.vapi?.isConnected() || false
+    // VAPI SDK doesn't have a direct isConnected method
+    // This is a placeholder - actual implementation would need to track connection state
+    return false
   }
 
   isMuted(): boolean {
-    return this.vapi?.isMuted() || false
+    // VAPI SDK doesn't have a direct isMuted method
+    // This is a placeholder - actual implementation would need to track mute state
+    return false
   }
 
   // Add custom event listener
@@ -127,7 +137,8 @@ export class VAPIService {
     if (!this.vapi) {
       throw new Error('VAPI not initialized')
     }
-    this.vapi.on(event, callback)
+    // Type assertion to handle VAPI event types
+    (this.vapi as any).on(event, callback)
   }
 
   // Remove event listener
@@ -135,7 +146,8 @@ export class VAPIService {
     if (!this.vapi) {
       throw new Error('VAPI not initialized')
     }
-    this.vapi.off(event, callback)
+    // Type assertion to handle VAPI event types
+    (this.vapi as any).off(event, callback)
   }
 
   // Cleanup

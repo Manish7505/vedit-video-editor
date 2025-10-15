@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-// Auth removed
+import { useUser, SignInButton, UserButton } from '@clerk/clerk-react'
 import { 
   Bot, 
   Users, 
@@ -21,6 +21,7 @@ import {
 
 const HomePage = () => {
   const navigate = useNavigate()
+  const { isSignedIn, user } = useUser()
 
   // Function to trigger AI assistant
   const openAIAssistant = () => {
@@ -153,18 +154,35 @@ const HomePage = () => {
                 <MessageCircle className="w-4 h-4" />
                 <span className="hidden sm:inline">Contact Sales</span>
               </motion.a>
-              <button className="px-4 py-2 bg-yellow-400 text-black font-semibold rounded-full hover:bg-yellow-300 transition-colors text-sm">
-                Free Trial
-              </button>
-              <button className="px-4 py-2 text-white font-semibold rounded-full transition-colors text-sm border border-white/20 hover:bg-white/10">
-                Log in
-              </button>
               <button 
                 onClick={() => navigate('/editor')}
-                className="px-4 py-2 bg-purple-600 text-white font-semibold rounded-full hover:bg-purple-500 transition-colors text-sm"
+                className="px-4 py-2 bg-yellow-400 text-black font-semibold rounded-full hover:bg-yellow-300 transition-colors text-sm"
               >
-                Get Started
+                Free Trial
               </button>
+              
+              {/* Clerk Authentication */}
+              {isSignedIn ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-white text-sm hidden sm:inline">
+                    Welcome, {user?.firstName}
+                  </span>
+                  <UserButton 
+                    afterSignOutUrl="/"
+                    appearance={{
+                      elements: {
+                        avatarBox: "w-8 h-8"
+                      }
+                    }}
+                  />
+                </div>
+              ) : (
+                <SignInButton mode="modal">
+                  <button className="px-4 py-2 text-white font-semibold rounded-full transition-colors text-sm border border-white/20 hover:bg-white/10">
+                    Log in
+                  </button>
+                </SignInButton>
+              )}
               {false && (
                 <>
                   <motion.button 

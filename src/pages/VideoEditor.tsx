@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+
 import { 
   Play, 
   Pause, 
@@ -36,10 +37,17 @@ import {
   MoreHorizontal,
   ChevronUp,
   ChevronDown as ChevronDownIcon,
-  Sparkles
+  Sparkles,
+  X
 } from 'lucide-react'
 import { useVideoEditor } from '../contexts/VideoEditorContext'
-import LocalAIAssistant from '../components/LocalAIAssistant'
+// @ts-ignore - Vite will handle worker import
+import WaveformWorker from '../workers/waveformWorker.ts?worker'
+import { useVideoEditorStore } from '../stores/videoEditorStore'
+import VideoEditorAI from '../components/VideoEditorAI'
+import VideoEditorVAPIAssistant from '../components/VideoEditorVAPIAssistant'
+import ExportPanel from '../components/ExportPanel'
+import toast from 'react-hot-toast'
 
 // Helper function to convert AudioBuffer to WAV
 const audioBufferToWav = (buffer: AudioBuffer): ArrayBuffer => {
@@ -106,7 +114,22 @@ const VideoEditor = () => {
     selectedClipId,
     setSelectedClipId,
     zoom,
-    setZoom
+    setZoom,
+    canUndo,
+    canRedo,
+    undo,
+    redo,
+    initializeHistory,
+    adjustments,
+    setAdjustments,
+    activeFilters,
+    setActiveFilters,
+    activeEffects,
+    setActiveEffects,
+    videoTools,
+    setVideoTools,
+    textOverlays,
+    setTextOverlays
   } = useVideoEditor()
 
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -123,6 +146,8 @@ const VideoEditor = () => {
   const [activeLeftTab, setActiveLeftTab] = useState<'media' | 'effects' | 'text' | 'audio'>('media')
   const [activeRightTab, setActiveRightTab] = useState<'properties' | 'adjustments' | 'filters' | 'ai-assistant'>('properties')
   const [playheadPosition, setPlayheadPosition] = useState(0)
+  const [isPlayheadDragging, setIsPlayheadDragging] = useState(false)
+  const [dragTime, setDragTime] = useState(0)
   
   // Enhanced drag & drop state
   const [draggedClip, setDraggedClip] = useState<string | null>(null)
@@ -131,62 +156,51 @@ const VideoEditor = () => {
   const [isResizing, setIsResizing] = useState(false)
   const [resizeHandle, setResizeHandle] = useState<'left' | 'right' | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; clipId: string } | null>(null)
+  const contextMenuRef = useRef<HTMLDivElement | null>(null)
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [trackHeights, setTrackHeights] = useState<Record<string, number>>({})
+  const [activeTool, setActiveTool] = useState<string | null>(null)
+  const [cutMode, setCutMode] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  
+  // Export state
+  const [showExportPanel, setShowExportPanel] = useState(false)
   
   // Media upload state
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const waveformWorkerRef = useRef<Worker | null>(null)
 
-  // Video adjustments state (combined all adjustments here)
-  const [adjustments, setAdjustments] = useState({
-    brightness: 0,
-    contrast: 0,
-    saturation: 0,
-    exposure: 0,
-    hue: 0,
-    blur: 0,
-    sharpen: 0,
-    filmGrain: 0,
-    vignette: 0
-  })
-
-  // Text overlay state
-  const [textOverlays, setTextOverlays] = useState<Array<{
-    id: string
-    text: string
-    x: number
-    y: number
-    fontSize: number
-    color: string
-  }>>([])
-
-  // Effects state (transition effects only)
-  const [activeEffects, setActiveEffects] = useState<string[]>([])
-  
-  // Video tools state
-  const [videoTools, setVideoTools] = useState({
-    trimStart: 0,
-    trimEnd: 0,
-    cropX: 0,
-    cropY: 0,
-    cropWidth: 100,
-    cropHeight: 100,
-    speed: 1,
-    volume: 1
-  })
-  
-  // Filters state
-  const [activeFilters, setActiveFilters] = useState<string[]>([])
+  // All editing states are now managed by the store
 
   // Calculate timeline dimensions
   const timelineWidth = 2000
-  const pixelsPerSecond = (timelineWidth * zoom) / duration
+  const safeDuration = duration > 0 ? duration : 1
+  const pixelsPerSecond = (timelineWidth * zoom) / safeDuration
 
-  // Update playhead position
+  // Update playhead position (but not during dragging)
   useEffect(() => {
-    setPlayheadPosition(currentTime * pixelsPerSecond)
-  }, [currentTime, pixelsPerSecond])
+    if (!isPlayheadDragging) {
+      setPlayheadPosition(currentTime * pixelsPerSecond)
+    }
+  }, [currentTime, pixelsPerSecond, isPlayheadDragging])
+
+  // Initialize history on component mount
+  useEffect(() => {
+    if (!waveformWorkerRef.current) {
+      waveformWorkerRef.current = new WaveformWorker()
+    }
+    initializeHistory()
+  }, [initializeHistory])
+
+  // Load project name from localStorage on mount
+  useEffect(() => {
+    const savedProjectName = localStorage.getItem('vedit-project-name')
+    if (savedProjectName && savedProjectName !== 'Untitled Project') {
+      setProjectName(savedProjectName)
+    }
+  }, [setProjectName])
 
   // Handle playback
   useEffect(() => {
@@ -194,7 +208,20 @@ const VideoEditor = () => {
     if (isPlaying && currentTime < duration) {
       interval = window.setInterval(() => {
         const newTime = currentTime + 0.1
-        setCurrentTime(newTime >= duration ? 0 : newTime)
+        if (newTime >= duration) {
+          // Loop back to the beginning instead of stopping
+          setCurrentTime(0)
+          // Keep playing (don't set isPlaying to false)
+          // Reset video/audio elements to beginning
+          if (videoRef.current) {
+            videoRef.current.currentTime = 0
+          }
+          if (audioRef.current) {
+            audioRef.current.currentTime = 0
+          }
+        } else {
+          setCurrentTime(newTime)
+        }
       }, 100)
     }
     return () => clearInterval(interval)
@@ -220,6 +247,18 @@ const VideoEditor = () => {
   }
 
   const handleTimelineClick = (e: React.MouseEvent) => {
+    // Don't move playhead if clicking on a clip or if playhead is being dragged
+    if (isPlayheadDragging) return
+    
+    // Check if the click target is a clip or inside a clip
+    const target = e.target as HTMLElement
+    const isClipClick = target.closest('[data-clip-id]') || target.hasAttribute('data-clip-id')
+    
+    if (isClipClick) {
+      // Don't move playhead when clicking on clips
+      return
+    }
+    
     if (timelineRef.current) {
       const rect = timelineRef.current.getBoundingClientRect()
       const x = e.clientX - rect.left + timelineRef.current.scrollLeft
@@ -227,6 +266,41 @@ const VideoEditor = () => {
       seekTo(Math.max(0, Math.min(time, duration)))
     }
   }
+
+  // Playhead drag handlers
+  const handlePlayheadMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsPlayheadDragging(true)
+    // Pause playback when dragging playhead
+    if (isPlaying) {
+      setIsPlaying(false)
+      if (videoRef.current) videoRef.current.pause()
+      if (audioRef.current) audioRef.current.pause()
+    }
+  }
+
+  const handlePlayheadMouseMove = useCallback((e: MouseEvent) => {
+    if (!isPlayheadDragging || !timelineRef.current) return
+    
+    const rect = timelineRef.current.getBoundingClientRect()
+    const x = e.clientX - rect.left + timelineRef.current.scrollLeft
+    const time = x / pixelsPerSecond
+    const clampedTime = Math.max(0, Math.min(time, duration))
+    
+    // Update playhead position smoothly
+    setPlayheadPosition(clampedTime * pixelsPerSecond)
+    setCurrentTime(clampedTime)
+    setDragTime(clampedTime)
+  }, [isPlayheadDragging, pixelsPerSecond, duration, setCurrentTime])
+
+  const handlePlayheadMouseUp = useCallback(() => {
+    if (isPlayheadDragging) {
+      setIsPlayheadDragging(false)
+      // Sync with video/audio elements
+      seekTo(currentTime)
+    }
+  }, [isPlayheadDragging, currentTime])
 
   const handleZoom = (delta: number) => {
     const newZoom = Math.max(0.25, Math.min(4, zoom + delta))
@@ -342,12 +416,86 @@ const VideoEditor = () => {
     }
   }, [volume])
 
+  // Sync playbackRate with elements when `playbackRate` changes
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = playbackRate
+    }
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackRate
+    }
+  }, [playbackRate])
+
   // Sync mute state with video element
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.muted = isMuted
     }
   }, [isMuted])
+
+  // Apply video transformations when videoTools change
+  useEffect(() => {
+    if (videoRef.current) {
+      // Apply speed control
+      if (videoTools.speed) {
+        videoRef.current.playbackRate = videoTools.speed
+      }
+      // Apply volume control
+      if (videoTools.volume !== undefined) {
+        videoRef.current.volume = videoTools.volume
+      }
+    }
+  }, [videoTools.speed, videoTools.volume])
+
+  // Sync track volumes with media elements based on current time
+  useEffect(() => {
+    tracks.forEach(track => {
+      // Find the clip that's currently playing at the current time
+      const currentClip = clips.find(clip => 
+        clip.trackId === track.id && 
+        currentTime >= clip.startTime && 
+        currentTime <= clip.endTime
+      )
+      
+      if (currentClip) {
+        if (currentClip.type === 'video' && videoRef.current) {
+          videoRef.current.volume = track.volume * volume
+          videoRef.current.muted = track.muted || isMuted
+        } else if (currentClip.type === 'audio' && audioRef.current) {
+          audioRef.current.volume = track.volume * volume
+          audioRef.current.muted = track.muted || isMuted
+        }
+      }
+    })
+  }, [tracks, clips, volume, isMuted, currentTime])
+
+  // Function to update volume for currently playing clips
+  const updateCurrentClipVolumes = useCallback(() => {
+    tracks.forEach(track => {
+      const currentClip = clips.find(clip => 
+        clip.trackId === track.id && 
+        currentTime >= clip.startTime && 
+        currentTime <= clip.endTime
+      )
+      
+      if (currentClip) {
+        if (currentClip.type === 'video' && videoRef.current) {
+          videoRef.current.volume = track.volume * volume
+          videoRef.current.muted = track.muted || isMuted
+        } else if (currentClip.type === 'audio' && audioRef.current) {
+          audioRef.current.volume = track.volume * volume
+          audioRef.current.muted = track.muted || isMuted
+        }
+      }
+    })
+  }, [tracks, clips, currentTime, volume, isMuted])
+
+  // Update volumes when current time changes (during playback)
+  useEffect(() => {
+    if (isPlaying) {
+      updateCurrentClipVolumes()
+    }
+  }, [currentTime, isPlaying, updateCurrentClipVolumes])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -364,11 +512,23 @@ const VideoEditor = () => {
           break
         case 'arrowleft':
           e.preventDefault()
-          handleSkip('back')
+          if (e.shiftKey) {
+            // Fine control: move by 0.1 seconds
+            const newTime = Math.max(0, currentTime - 0.1)
+            seekTo(newTime)
+          } else {
+            handleSkip('back')
+          }
           break
         case 'arrowright':
           e.preventDefault()
-          handleSkip('forward')
+          if (e.shiftKey) {
+            // Fine control: move by 0.1 seconds
+            const newTime = Math.min(duration, currentTime + 0.1)
+            seekTo(newTime)
+          } else {
+            handleSkip('forward')
+          }
           break
         case 'm': // Mute
           e.preventDefault()
@@ -378,14 +538,108 @@ const VideoEditor = () => {
           e.preventDefault()
           setShowGrid(!showGrid)
           break
+        case 's': // Save project (Ctrl+S handled below)
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault()
+            localStorage.setItem('vedit-project-name', projectName)
+            console.log('Project saved:', projectName)
+            break
+          }
+          break
+        case 'c': // Toggle cut mode
+          e.preventDefault()
+          if (activeTool === 'cut') {
+            setActiveTool(null)
+            setCutMode(false)
+          } else {
+            setActiveTool('cut')
+            setCutMode(true)
+          }
+          break
+        case 'd': // Duplicate selected clip
+          e.preventDefault()
+          if (selectedClipId) {
+            const clip = clips.find(c => c.id === selectedClipId)
+            if (clip) {
+              const newClip = {
+                trackId: clip.trackId,
+                name: `${clip.name} (Copy)`,
+                type: clip.type,
+                startTime: clip.endTime + 0.1,
+                endTime: clip.endTime + clip.duration + 0.1,
+                duration: clip.duration,
+                url: clip.url,
+                content: clip.content,
+                waveform: clip.waveform,
+                filters: clip.filters
+              }
+              addClip(newClip)
+              toast.success('Clip duplicated')
+            }
+          }
+          break
+        case 'delete': // Delete selected clip
+          e.preventDefault()
+          if (selectedClipId) {
+            removeClip(selectedClipId)
+            setSelectedClipId(null)
+            toast.success('Clip deleted')
+          }
+          break
+        case 'x': // Split clip at current time
+          e.preventDefault()
+          if (selectedClipId) {
+            const clip = clips.find(c => c.id === selectedClipId)
+            if (clip && currentTime > clip.startTime && currentTime < clip.endTime) {
+              const newClip = {
+                trackId: clip.trackId,
+                name: `${clip.name} (2)`,
+                type: clip.type,
+                startTime: currentTime,
+                endTime: clip.endTime,
+                duration: clip.endTime - currentTime,
+                url: clip.url,
+                content: clip.content,
+                waveform: clip.waveform
+              }
+              updateClip(clip.id, { 
+                endTime: currentTime,
+                duration: currentTime - clip.startTime
+              })
+              addClip(newClip)
+              toast.success('Clip split')
+            }
+          }
+          break
         default:
           break
+      }
+
+      // Handle Ctrl+Z and Ctrl+Y for undo/redo
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key.toLowerCase()) {
+          case 'z':
+            e.preventDefault()
+            if (e.shiftKey) {
+              // Ctrl+Shift+Z for redo
+              if (canRedo) redo()
+            } else {
+              // Ctrl+Z for undo
+              if (canUndo) undo()
+            }
+            break
+          case 'y':
+            e.preventDefault()
+            // Ctrl+Y for redo
+            if (canRedo) redo()
+            break
+        }
       }
     }
 
     window.addEventListener('keydown', handleKeyPress)
     return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [isPlaying, showGrid]) // Dependencies for keyboard shortcuts
+  }, [isPlaying, showGrid, activeTool, setActiveTool, setCutMode, canUndo, canRedo, undo, redo]) // Dependencies for keyboard shortcuts
 
   // Enhanced drag & drop functions
   const handleClipMouseDown = useCallback((e: React.MouseEvent, clipId: string) => {
@@ -394,6 +648,54 @@ const VideoEditor = () => {
     
     const clip = clips.find(c => c.id === clipId)
     if (!clip) return
+    
+    // Handle cut mode
+    if (cutMode) {
+      const timelineRect = timelineRef.current?.getBoundingClientRect()
+      if (!timelineRect) return
+      
+      const clickX = e.clientX - timelineRect.left
+      const clickTime = clickX / pixelsPerSecond
+      
+      // Only cut if click is within the clip bounds
+      if (clickTime > clip.startTime && clickTime < clip.endTime) {
+        // Create new clip for the second part
+        const newClip = {
+          trackId: clip.trackId,
+          name: `${clip.name} (2)`,
+          type: clip.type,
+          startTime: clickTime,
+          endTime: clip.endTime,
+          duration: clip.endTime - clickTime,
+          file: clip.file,
+          url: clip.url,
+          content: clip.content,
+          waveform: clip.waveform
+        }
+        
+        // Update original clip
+        updateClip(clip.id, { 
+          endTime: clickTime,
+          duration: clickTime - clip.startTime
+        })
+        
+        // Add new clip
+        addClip(newClip)
+        
+        // Set current time to the cut point
+        setCurrentTime(clickTime)
+        
+        // Exit cut mode
+        setCutMode(false)
+        setActiveTool(null)
+        
+        // Save to history after cut operation
+        const store = useVideoEditorStore.getState()
+        store.saveToHistory()
+        
+        return
+      }
+    }
     
     const rect = e.currentTarget.getBoundingClientRect()
     const timelineRect = timelineRef.current?.getBoundingClientRect()
@@ -406,7 +708,7 @@ const VideoEditor = () => {
     })
     setIsDragging(true)
     setSelectedClipId(clipId)
-  }, [clips, setSelectedClipId])
+  }, [clips, setSelectedClipId, cutMode, updateClip, addClip, pixelsPerSecond, setCurrentTime])
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isDragging || !draggedClip || !timelineRef.current) return
@@ -426,11 +728,20 @@ const VideoEditor = () => {
   }, [isDragging, draggedClip, dragOffset, pixelsPerSecond, clips, updateClip])
 
   const handleMouseUp = useCallback(() => {
+    const wasDragging = isDragging
+    const wasResizing = isResizing
+    
     setIsDragging(false)
     setDraggedClip(null)
     setIsResizing(false)
     setResizeHandle(null)
-  }, [])
+    
+    // Save to history when editing operation completes
+    if (wasDragging || wasResizing) {
+      const store = useVideoEditorStore.getState()
+      store.saveToHistory()
+    }
+  }, [isDragging, isResizing])
 
   // Resize functionality
   const handleResizeStart = useCallback((e: React.MouseEvent, clipId: string, handle: 'left' | 'right') => {
@@ -467,9 +778,29 @@ const VideoEditor = () => {
     if (!files || files.length === 0) return
     
     setIsUploading(true)
+    const newFiles = Array.from(files)
     try {
-      const newFiles = Array.from(files)
       setUploadedFiles(prev => [...prev, ...newFiles])
+      
+      // Ensure we have at least one track
+      if (tracks.length === 0) {
+        addTrack({
+          name: 'Video Track 1',
+          type: 'video',
+          muted: false,
+          locked: false,
+          color: '#3B82F6',
+          volume: 1.0
+        })
+        addTrack({
+          name: 'Audio Track 1',
+          type: 'audio',
+          muted: false,
+          locked: false,
+          color: '#10B981',
+          volume: 1.0
+        })
+      }
       
       // Find the end time of the last video clip to place new clips sequentially
       const videoClips = clips.filter(clip => clip.type === 'video')
@@ -486,14 +817,18 @@ const VideoEditor = () => {
         
         const fileUrl = URL.createObjectURL(file)
         
-        // For videos, get actual duration
+      // For videos, get actual duration
         if (fileType === 'video') {
           const video = document.createElement('video')
           video.preload = 'metadata'
           
-          await new Promise<void>((resolve) => {
+        await new Promise<void>((resolve) => {
             video.onloadedmetadata = () => {
               const videoDuration = video.duration || 10
+              
+              // Get the current tracks after potential creation
+              const currentTracks = useVideoEditorStore.getState().tracks
+              const videoTrack = currentTracks.find(t => t.type === 'video') || currentTracks[0]
               
               addClip({
                 name: file.name,
@@ -502,7 +837,8 @@ const VideoEditor = () => {
                 endTime: sequentialStartTime + videoDuration,
                 duration: videoDuration,
                 url: fileUrl,
-                trackId: tracks[0]?.id || 'track-1'
+                originalUrl: fileUrl,
+                trackId: videoTrack?.id || 'default-video-track'
               })
               
               // Move playhead to the end of this video
@@ -517,15 +853,46 @@ const VideoEditor = () => {
           // For audio and images, use default durations
           const defaultDuration = fileType === 'audio' ? 30 : 5
           
-          addClip({
+          // Get the current tracks after potential creation
+          const currentTracks = useVideoEditorStore.getState().tracks
+          const targetTrack = fileType === 'audio' 
+            ? currentTracks.find(t => t.type === 'audio') || currentTracks[1] || currentTracks[0]
+            : currentTracks.find(t => t.type === 'video') || currentTracks[0]
+          
+          const newClip: any = {
             name: file.name,
-            type: fileType,
+            type: fileType as 'audio' | 'image',
             startTime: sequentialStartTime,
             endTime: sequentialStartTime + defaultDuration,
             duration: defaultDuration,
             url: fileUrl,
-            trackId: fileType === 'audio' ? (tracks[1]?.id || 'track-2') : (tracks[0]?.id || 'track-1')
-          })
+            originalUrl: fileUrl,
+            trackId: targetTrack?.id || 'default-track'
+          }
+          
+          // If audio, try to generate a quick waveform using WebAudio + worker
+          if (fileType === 'audio' && waveformWorkerRef.current) {
+            try {
+              const arrayBuffer = await file.arrayBuffer()
+              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
+              const decoded = await audioCtx.decodeAudioData(arrayBuffer)
+              const channel = decoded.getChannelData(0)
+              const id = `wf-${Date.now()}`
+              waveformWorkerRef.current.postMessage({ id, samples: channel, targetLength: 600 })
+              const waveform = await new Promise<number[]>((resolve) => {
+                const handler = (e: MessageEvent<any>) => {
+                  if (e.data?.id === id) {
+                    resolve(e.data.waveform || [])
+                    waveformWorkerRef.current?.removeEventListener('message', handler as any)
+                  }
+                }
+                waveformWorkerRef.current?.addEventListener('message', handler as any)
+              })
+              ;(newClip as any).waveform = waveform
+            } catch {}
+          }
+          
+          addClip(newClip)
           
           if (fileType === 'audio') {
             // Audio doesn't affect sequential video placement, but move playhead
@@ -538,8 +905,10 @@ const VideoEditor = () => {
       }
     } catch (error) {
       console.error('Upload error:', error)
+      toast.error('Failed to upload files')
     } finally {
       setIsUploading(false)
+      toast.success(`Successfully added ${newFiles.length} file(s) to timeline`)
     }
   }, [clips, addClip, tracks, setCurrentTime])
 
@@ -591,7 +960,32 @@ const VideoEditor = () => {
     addClip(newClip)
     
     setContextMenu(null)
+    
+    // Save to history after split operation
+    const store = useVideoEditorStore.getState()
+    store.saveToHistory()
   }, [contextMenu, clips, currentTime, updateClip, addClip])
+
+  // Clamp context menu within viewport after it mounts
+  useEffect(() => {
+    if (!contextMenu) {
+      setContextMenuPos(null)
+      return
+    }
+    // Defer to next frame to ensure ref has dimensions
+    const id = window.requestAnimationFrame(() => {
+      const menuEl = contextMenuRef.current
+      const width = menuEl?.offsetWidth || 200
+      const height = menuEl?.offsetHeight || 160
+      const padding = 8
+      const maxX = window.innerWidth - width - padding
+      const maxY = window.innerHeight - height - padding
+      const clampedX = Math.max(padding, Math.min(contextMenu.x, maxX))
+      const clampedY = Math.max(padding, Math.min(contextMenu.y, maxY))
+      setContextMenuPos({ x: clampedX, y: clampedY })
+    })
+    return () => window.cancelAnimationFrame(id)
+  }, [contextMenu])
 
   const handleDuplicateClip = useCallback(() => {
     if (!contextMenu) return
@@ -614,12 +1008,20 @@ const VideoEditor = () => {
     
     addClip(newClip)
     setContextMenu(null)
+    
+    // Save to history after duplicate operation
+    const store = useVideoEditorStore.getState()
+    store.saveToHistory()
   }, [contextMenu, clips, addClip])
 
   const handleDeleteClip = useCallback(() => {
     if (!contextMenu) return
     removeClip(contextMenu.clipId)
     setContextMenu(null)
+    
+    // Save to history after delete operation
+    const store = useVideoEditorStore.getState()
+    store.saveToHistory()
   }, [contextMenu, removeClip])
 
   // Track management functions (for future implementation)
@@ -641,7 +1043,49 @@ const VideoEditor = () => {
   const handleTrackVolumeChange = useCallback((trackId: string, value: string) => {
     const newVolume = parseInt(value) / 100
     updateTrack(trackId, { volume: newVolume })
-  }, [updateTrack])
+    
+    // Apply volume to media elements based on current time
+    const track = tracks.find(t => t.id === trackId)
+    if (track) {
+      // Find the clip that's currently playing at the current time
+      const currentClip = clips.find(clip => 
+        clip.trackId === trackId && 
+        currentTime >= clip.startTime && 
+        currentTime <= clip.endTime
+      )
+      
+      if (currentClip) {
+        if (currentClip.type === 'video' && videoRef.current) {
+          videoRef.current.volume = newVolume * volume
+        } else if (currentClip.type === 'audio' && audioRef.current) {
+          audioRef.current.volume = newVolume * volume
+        }
+      }
+    }
+  }, [updateTrack, tracks, clips, volume, currentTime])
+
+  const handleTrackMute = useCallback((trackId: string) => {
+    const track = tracks.find(t => t.id === trackId)
+    if (track) {
+      const newMuted = !track.muted
+      updateTrack(trackId, { muted: newMuted })
+      
+      // Apply mute to media elements based on current time
+      const currentClip = clips.find(clip => 
+        clip.trackId === trackId && 
+        currentTime >= clip.startTime && 
+        currentTime <= clip.endTime
+      )
+      
+      if (currentClip) {
+        if (currentClip.type === 'video' && videoRef.current) {
+          videoRef.current.muted = newMuted || isMuted
+        } else if (currentClip.type === 'audio' && audioRef.current) {
+          audioRef.current.muted = newMuted || isMuted
+        }
+      }
+    }
+  }, [updateTrack, tracks, clips, currentTime, isMuted])
 
   // Waveform generation
   const generateWaveform = useCallback((duration: number): number[] => {
@@ -660,15 +1104,18 @@ const VideoEditor = () => {
 
   // Mouse event listeners
   useEffect(() => {
-    if (isDragging || isResizing) {
-      document.addEventListener('mousemove', isResizing ? handleResizeMove : handleMouseMove)
-      document.addEventListener('mouseup', handleMouseUp)
+    if (isDragging || isResizing || isPlayheadDragging) {
+      const moveHandler = isResizing ? handleResizeMove : isPlayheadDragging ? handlePlayheadMouseMove : handleMouseMove
+      const upHandler = isPlayheadDragging ? handlePlayheadMouseUp : handleMouseUp
+      
+      document.addEventListener('mousemove', moveHandler)
+      document.addEventListener('mouseup', upHandler)
       return () => {
-        document.removeEventListener('mousemove', isResizing ? handleResizeMove : handleMouseMove)
-        document.removeEventListener('mouseup', handleMouseUp)
+        document.removeEventListener('mousemove', moveHandler)
+        document.removeEventListener('mouseup', upHandler)
       }
     }
-  }, [isDragging, isResizing, handleMouseMove, handleResizeMove, handleMouseUp])
+  }, [isDragging, isResizing, isPlayheadDragging, handleMouseMove, handleResizeMove, handleMouseUp, handlePlayheadMouseMove, handlePlayheadMouseUp])
 
   // Generate time markers
   const timeMarkers = []
@@ -691,10 +1138,59 @@ const VideoEditor = () => {
   const currentClips = getCurrentClips()
 
   const tools = [
-    { icon: <Scissors className="w-5 h-5" />, label: 'Cut', active: false },
-    { icon: <Type className="w-5 h-5" />, label: 'Text', active: false },
-    { icon: <Wand2 className="w-5 h-5" />, label: 'Effects', active: false },
-    { icon: <Filter className="w-5 h-5" />, label: 'Filters', active: false }
+    { 
+      icon: <Scissors className="w-5 h-5" />, 
+      label: 'Cut', 
+      active: activeTool === 'cut',
+      onClick: () => {
+        if (activeTool === 'cut') {
+          setActiveTool(null)
+          setCutMode(false)
+        } else {
+          setActiveTool('cut')
+          setCutMode(true)
+        }
+      }
+    },
+    { 
+      icon: <Type className="w-5 h-5" />, 
+      label: 'Text', 
+      active: activeTool === 'text',
+      onClick: () => {
+        if (activeTool === 'text') {
+          setActiveTool(null)
+        } else {
+          setActiveTool('text')
+          setCutMode(false)
+        }
+      }
+    },
+    { 
+      icon: <Wand2 className="w-5 h-5" />, 
+      label: 'Effects', 
+      active: activeTool === 'effects',
+      onClick: () => {
+        if (activeTool === 'effects') {
+          setActiveTool(null)
+        } else {
+          setActiveTool('effects')
+          setCutMode(false)
+        }
+      }
+    },
+    { 
+      icon: <Filter className="w-5 h-5" />, 
+      label: 'Filters', 
+      active: activeTool === 'filters',
+      onClick: () => {
+        if (activeTool === 'filters') {
+          setActiveTool(null)
+        } else {
+          setActiveTool('filters')
+          setCutMode(false)
+        }
+      }
+    }
   ]
 
   // Waveform component
@@ -785,37 +1281,60 @@ const VideoEditor = () => {
               type="text"
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
-              className="text-sm font-medium bg-transparent border-none outline-none text-white px-2 py-1 rounded hover:bg-zinc-800 focus:bg-zinc-800 transition-colors w-32 sm:w-48"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.currentTarget.blur()
+                }
+              }}
+              className="text-sm font-medium bg-transparent border-none outline-none text-white px-2 py-1 rounded hover:bg-zinc-800 focus:bg-zinc-800 focus:ring-1 focus:ring-blue-500 transition-colors w-32 sm:w-48"
               placeholder="Untitled Project"
+              title="Click to edit project name"
             />
           </div>
         </div>
 
         <div className="flex items-center gap-1">
           <button 
-            onClick={() => console.log('Undo clicked')}
-            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors active:bg-zinc-700" 
+            onClick={undo}
+            disabled={!canUndo}
+            className={`p-2 hover:bg-zinc-800 rounded-lg transition-colors active:bg-zinc-700 ${
+              !canUndo ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
             title="Undo"
           >
-            <Undo className="w-4 h-4 text-gray-400 hover:text-white transition-colors" />
+            <Undo className={`w-4 h-4 transition-colors ${
+              canUndo ? 'text-gray-400 hover:text-white' : 'text-gray-600'
+            }`} />
           </button>
           <button 
-            onClick={() => console.log('Redo clicked')}
-            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors active:bg-zinc-700" 
+            onClick={redo}
+            disabled={!canRedo}
+            className={`p-2 hover:bg-zinc-800 rounded-lg transition-colors active:bg-zinc-700 ${
+              !canRedo ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
             title="Redo"
           >
-            <Redo className="w-4 h-4 text-gray-400 hover:text-white transition-colors" />
+            <Redo className={`w-4 h-4 transition-colors ${
+              canRedo ? 'text-gray-400 hover:text-white' : 'text-gray-600'
+            }`} />
           </button>
-          <div className="w-px h-5 bg-zinc-800 mx-1" />
+          
+          <div className="w-px h-6 bg-zinc-700 mx-2" />
+          
           <button 
-            onClick={() => console.log('Save clicked - Project:', projectName)}
-            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors active:bg-zinc-700" 
-            title="Save"
+            onClick={() => {
+              // Save project name to localStorage
+              localStorage.setItem('vedit-project-name', projectName)
+              console.log('Project saved:', projectName)
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+            title="Save Project (Ctrl+S)"
           >
-            <Save className="w-4 h-4 text-gray-400 hover:text-white transition-colors" />
+            <Save className="w-4 h-4" />
+            <span className="hidden sm:inline">Save</span>
           </button>
           <button 
-            onClick={() => console.log('Export clicked - Clips:', clips.length)}
+            onClick={() => setShowExportPanel(true)}
             className="px-3 py-1.5 bg-white text-black text-sm font-medium rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors flex items-center gap-2"
           >
             <Download className="w-4 h-4" />
@@ -1265,6 +1784,7 @@ const VideoEditor = () => {
                   {tools.map((tool) => (
                     <button
                       key={tool.label}
+                      onClick={tool.onClick}
                       className={`p-2 rounded transition-colors ${
                         tool.active ? 'bg-white text-black' : 'text-white hover:bg-white/20'
                       }`}
@@ -1274,6 +1794,14 @@ const VideoEditor = () => {
                     </button>
                   ))}
                 </div>
+                
+                {/* Cut Mode Indicator */}
+                {cutMode && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-red-500/20 border border-red-500/50 rounded-lg">
+                    <Scissors className="w-4 h-4 text-red-400" />
+                    <span className="text-sm text-red-400 font-medium">Cut Mode - Click on a clip to split it</span>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -1294,6 +1822,13 @@ const VideoEditor = () => {
                   title="Toggle Safe Area"
                 >
                   <Eye className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setShowShortcuts(!showShortcuts)}
+                  className="p-2 bg-black/50 backdrop-blur-sm hover:bg-black/70 rounded-lg transition-colors"
+                  title="Keyboard Shortcuts"
+                >
+                  <span className="text-white text-sm font-mono">?</span>
                 </button>
                 <button
                   onClick={() => setRightPanelOpen(!rightPanelOpen)}
@@ -1330,6 +1865,7 @@ const VideoEditor = () => {
                       {currentClips.find(clip => clip.type === 'video') && (
                         <video
                           ref={videoRef}
+                          data-clip-id={currentClips.find(clip => clip.type === 'video')?.id}
                           className={`w-full h-full object-contain transition-all duration-500 ${
                             activeEffects.includes('Fade In') ? 'opacity-0 animate-fade-in' :
                             activeEffects.includes('Fade Out') ? 'opacity-100 animate-fade-out' :
@@ -1337,6 +1873,7 @@ const VideoEditor = () => {
                             activeEffects.includes('Pan') ? 'transform-gpu' : ''
                           }`}
                           src={currentClips.find(clip => clip.type === 'video')?.url}
+                          loop
                           style={{
                             filter: `
                               brightness(${(adjustments.brightness + 100) / 100})
@@ -1359,8 +1896,13 @@ const VideoEditor = () => {
                                 return filter
                               }).join(' ')}
                             `.trim(),
-                            transform: activeEffects.includes('Pan') ? 'translateX(20px)' : 'none',
-                            transition: 'all 0.5s ease-in-out'
+                            transform: `
+                              ${videoTools.rotation ? `rotate(${videoTools.rotation}deg)` : ''}
+                              ${videoTools.cropWidth ? `scale(${videoTools.cropWidth / 100})` : ''}
+                              ${activeEffects.includes('Pan') ? 'translateX(20px)' : ''}
+                            `.trim(),
+                            opacity: videoTools.opacity ? videoTools.opacity / 100 : 1,
+                            transition: 'all 0.3s ease-in-out'
                           }}
                           onTimeUpdate={(e) => {
                             const video = e.target as HTMLVideoElement
@@ -1368,15 +1910,22 @@ const VideoEditor = () => {
                           }}
                           onLoadedMetadata={() => {
                             // Duration will be set automatically by the video element
+                            // Apply speed control
+                            if (videoRef.current && videoTools.speed) {
+                              videoRef.current.playbackRate = videoTools.speed
+                            }
                           }}
                           onPlay={() => setIsPlaying(true)}
                           onPause={() => setIsPlaying(false)}
                           onEnded={() => {
-                            setIsPlaying(false)
+                            // Loop back to the beginning instead of stopping
+                            setCurrentTime(0)
                             if (videoRef.current) {
-                              videoRef.current.pause()
                               videoRef.current.currentTime = 0
-                              setCurrentTime(0)
+                              // Keep playing if it was playing
+                              if (isPlaying) {
+                                videoRef.current.play()
+                              }
                             }
                           }}
                           muted={isMuted}
@@ -1402,8 +1951,8 @@ const VideoEditor = () => {
                           onEnded={() => {
                             setIsPlaying(false)
                             if (audioRef.current) {
-                              audioRef.current.currentTime = 0
-                              setCurrentTime(0)
+                              // Stay at the end, don't reset to 0
+                              setCurrentTime(duration)
                             }
                           }}
                           muted={isMuted}
@@ -1432,6 +1981,61 @@ const VideoEditor = () => {
                           }}
                         />
                       )}
+
+                      {/* Video/Image Overlays */}
+                      {clips
+                        .filter(clip => clip.trackId !== tracks.find(t => t.type === 'video')?.id && 
+                                       (clip.type === 'video' || clip.type === 'image') &&
+                                       currentTime >= clip.startTime && currentTime <= clip.endTime)
+                        .map((overlayClip) => {
+                          const x = (overlayClip.filters as any)?.x || 0
+                          const y = (overlayClip.filters as any)?.y || 0
+                          const opacity = (overlayClip.filters as any)?.opacity || 1
+                          
+                          return (
+                            <div
+                              key={overlayClip.id}
+                              className="absolute pointer-events-none"
+                              style={{
+                                left: `${x}%`,
+                                top: `${y}%`,
+                                opacity: opacity,
+                                transform: 'translate(-50%, -50%)',
+                                maxWidth: '30%',
+                                maxHeight: '30%'
+                              }}
+                            >
+                              {overlayClip.type === 'video' ? (
+                                <video
+                                  data-clip-id={overlayClip.id}
+                                  src={overlayClip.url}
+                                  className="w-full h-full object-contain rounded-lg shadow-lg"
+                                  muted
+                                  autoPlay
+                                  loop
+                                  style={{
+                                    filter: `
+                                      brightness(${(adjustments.brightness + 100) / 100})
+                                      contrast(${(adjustments.contrast + 100) / 100})
+                                    `.trim()
+                                  }}
+                                />
+                              ) : (
+                                <img
+                                  src={overlayClip.url}
+                                  alt={overlayClip.name}
+                                  className="w-full h-full object-contain rounded-lg shadow-lg"
+                                  style={{
+                                    filter: `
+                                      brightness(${(adjustments.brightness + 100) / 100})
+                                      contrast(${(adjustments.contrast + 100) / 100})
+                                    `.trim()
+                                  }}
+                                />
+                              )}
+                            </div>
+                          )
+                        })}
 
                       {/* Text Overlays */}
                       {textOverlays.map((text) => (
@@ -1667,9 +2271,11 @@ const VideoEditor = () => {
                       <GripVertical className="w-3 h-3 text-gray-500 cursor-move" />
           </div>
                     
-                    <div className="flex items-center gap-2 flex-1 min-w-0 ml-4">
-                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: track.color }} />
-                      <span className="text-xs font-medium text-gray-300 truncate">{track.name}</span>
+                    <div className={`flex items-center gap-2 flex-1 min-w-0 ml-4 ${track.muted ? 'opacity-60' : ''}`}>
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: track.muted ? '#6b7280' : track.color }} />
+                      <span className={`text-xs font-medium truncate ${track.muted ? 'text-gray-500' : 'text-gray-300'}`}>
+                        {track.muted ? `${track.name} (Muted)` : track.name}
+                      </span>
         </div>
                     
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1678,20 +2284,22 @@ const VideoEditor = () => {
                         <input
                           type="range"
                           min="0"
-                          max="200"
+                          max="100"
                           step="1"
                           value={Math.round(track.volume * 100)}
                           onChange={(e) => handleTrackVolumeChange(track.id, e.target.value)}
-                          className="w-full"
+                          className={`w-full ${track.muted ? 'opacity-50' : ''}`}
                           style={{
-                            background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${Math.round(track.volume * 50)}%, #71717a ${Math.round(track.volume * 50)}%, #71717a 100%)`
+                            background: track.muted 
+                              ? 'linear-gradient(to right, #ef4444 0%, #ef4444 100%)'
+                              : `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${Math.round(track.volume * 100)}%, #71717a ${Math.round(track.volume * 100)}%, #71717a 100%)`
                           }}
-                          title={`Volume: ${Math.round(track.volume * 100)}%`}
+                          title={track.muted ? 'Muted' : `Volume: ${Math.round(track.volume * 100)}%`}
                         />
-      </div>
+                      </div>
 
                       <button
-                        onClick={() => updateTrack(track.id, { muted: !track.muted })}
+                        onClick={() => handleTrackMute(track.id)}
                         className="p-1 hover:bg-zinc-800 rounded"
                         title={track.muted ? 'Unmute' : 'Mute'}
                       >
@@ -1723,6 +2331,49 @@ const VideoEditor = () => {
                           <ChevronDownIcon className="w-2 h-2 text-gray-400" />
               </button>
       </div>
+                      
+                      {/* Duplicate Track */}
+                      <button
+                        onClick={() => {
+                          const trackClips = clips.filter(clip => clip.trackId === track.id)
+                          const newTrack = {
+                            name: `${track.name} (Copy)`,
+                            type: track.type,
+                            muted: track.muted,
+                            locked: false,
+                            volume: track.volume,
+                            color: track.color
+                          }
+                          addTrack(newTrack)
+                          
+                          // Get the new track ID from the store after adding
+                          const store = useVideoEditorStore.getState()
+                          const newTracks = store.tracks
+                          const newTrackId = newTracks[newTracks.length - 1].id
+                          
+                          // Duplicate all clips from this track to the new track
+                          trackClips.forEach(clip => {
+                            const newClip = {
+                              trackId: newTrackId,
+                              name: `${clip.name} (Copy)`,
+                              type: clip.type,
+                              startTime: clip.startTime,
+                              endTime: clip.endTime,
+                              duration: clip.duration,
+                              url: clip.url,
+                              waveform: clip.waveform
+                            }
+                            addClip(newClip)
+                          })
+                          
+                          // Save to history after duplicate track operation
+                          store.saveToHistory()
+                        }}
+                        className="p-1 hover:bg-blue-900/50 rounded"
+                        title="Duplicate Track"
+                      >
+                        <Copy className="w-3 h-3 text-blue-400" />
+                      </button>
                       
                       {/* Delete Track */}
                       {tracks.length > 1 && (
@@ -1783,17 +2434,25 @@ const VideoEditor = () => {
                           return (
                             <div
                               key={clip.id}
-                              className={`absolute top-1 bottom-1 rounded-lg cursor-move overflow-hidden transition-all ${
+                              data-clip-id={clip.id}
+                              className={`absolute top-1 bottom-1 rounded-lg overflow-hidden transition-all ${
+                                cutMode 
+                                  ? 'cursor-crosshair' 
+                                  : 'cursor-move'
+                              } ${
                                 isSelected
                                   ? 'ring-2 ring-blue-500 shadow-lg shadow-blue-500/50'
                                   : 'hover:ring-2 hover:ring-gray-400 hover:shadow-md'
-                              } ${isDraggingThis ? 'opacity-80 scale-105' : ''}`}
+                              } ${isDraggingThis ? 'opacity-80 scale-105' : ''} ${
+                                cutMode ? 'hover:ring-2 hover:ring-red-500' : ''
+                              }`}
                               style={{
                                 left: clip.startTime * pixelsPerSecond,
                                 width: Math.max(clipWidth, 40),
                                 backgroundColor: track.color + 'CC'
                               }}
                               onMouseDown={(e) => handleClipMouseDown(e, clip.id)}
+                              onClick={(e) => e.stopPropagation()}
                               onContextMenu={(e) => handleContextMenu(e, clip.id)}
                             >
                               {/* Clip Thumbnail */}
@@ -1830,29 +2489,117 @@ const VideoEditor = () => {
                               />
 
                               {/* Clip Actions (on hover) */}
-                              <div className="absolute top-1 right-1 opacity-0 hover:opacity-100 transition-opacity">
+                              <div className="absolute top-1 right-1 opacity-0 hover:opacity-100 transition-opacity flex gap-1">
+                                {/* Duplicate Button */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    const clipToDuplicate = clips.find(c => c.id === clip.id)
+                                    if (!clipToDuplicate) return
+                                    
+                                    const newClip = {
+                                      trackId: clipToDuplicate.trackId,
+                                      name: `${clipToDuplicate.name} (Copy)`,
+                                      type: clipToDuplicate.type,
+                                      startTime: clipToDuplicate.endTime + 0.1,
+                                      endTime: clipToDuplicate.endTime + 0.1 + (clipToDuplicate.endTime - clipToDuplicate.startTime),
+                                      duration: clipToDuplicate.duration,
+                                      url: clipToDuplicate.url,
+                                      waveform: clipToDuplicate.waveform
+                                    }
+                                    
+                                    addClip(newClip)
+                                    
+                                    // Save to history after duplicate operation
+                                    const store = useVideoEditorStore.getState()
+                                    store.saveToHistory()
+                                  }}
+                                  className="p-1 bg-blue-600/80 rounded hover:bg-blue-600 transition-colors"
+                                  title="Duplicate Clip"
+                                >
+                                  <Copy className="w-3 h-3 text-white" />
+                                </button>
+                                
+                                {/* Delete Button */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    removeClip(clip.id)
+                                    
+                                    // Save to history after delete operation
+                                    const store = useVideoEditorStore.getState()
+                                    store.saveToHistory()
+                                  }}
+                                  className="p-1 bg-red-600/80 rounded hover:bg-red-600 transition-colors"
+                                  title="Delete Clip"
+                                >
+                                  <Trash2 className="w-3 h-3 text-white" />
+                                </button>
+                                
+                                {/* More Options Button */}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     handleContextMenu(e, clip.id)
                                   }}
                                   className="p-1 bg-black/50 rounded hover:bg-black/70 transition-colors"
+                                  title="More Options"
                                 >
                                   <MoreHorizontal className="w-3 h-3 text-white" />
-              </button>
-      </div>
+                                </button>
+                              </div>
     </div>
   )
                         })}
                     </div>
                   ))}
 
+                  {/* Empty Timeline State */}
+                  {clips.length === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="text-center text-gray-500 space-y-4">
+                        <div className="w-20 h-20 mx-auto bg-gray-800 rounded-2xl flex items-center justify-center">
+                          <Video className="w-10 h-10 text-gray-600" />
+                        </div>
+                        <div>
+                          <p className="text-lg font-medium text-gray-400 mb-2">Timeline is empty</p>
+                          <p className="text-sm text-gray-600 max-w-xs">
+                            Upload video files or drag & drop media here to start editing
+                          </p>
+                        </div>
+                        <div className="pt-2">
+                          <button
+                            onClick={handleUploadClick}
+                            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 mx-auto pointer-events-auto"
+                          >
+                            <Upload className="w-4 h-4" />
+                            Upload Media
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Playhead */}
                   <div
-                    className="absolute top-0 w-0.5 h-full bg-red-500 pointer-events-none z-30"
+                    className={`absolute top-0 w-0.5 h-full bg-red-500 z-30 transition-all duration-100 ${
+                      isPlayheadDragging ? 'cursor-grabbing' : 'cursor-grab'
+                    }`}
                     style={{ left: playheadPosition }}
+                    onMouseDown={handlePlayheadMouseDown}
                   >
-                    <div className="absolute -top-1 -left-2 w-4 h-4 bg-red-500 rounded-sm" />
+                    <div 
+                      className={`absolute -top-1 -left-2 w-4 h-4 bg-red-500 rounded-sm transition-all duration-100 ${
+                        isPlayheadDragging ? 'scale-110 shadow-lg' : 'hover:scale-105'
+                      }`}
+                    />
+                    
+                    {/* Time tooltip when dragging */}
+                    {isPlayheadDragging && (
+                      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                        {formatTime(dragTime)}
+                      </div>
+                    )}
                   </div>
                 </div>
             </div>
@@ -1897,15 +2644,45 @@ const VideoEditor = () => {
               <div className="flex-1 overflow-hidden p-4">
                 {activeRightTab === 'properties' && (
                   <div className="space-y-4">
-                    {selectedClipId ? (
-                      <>
-                        <div>
-                          <label className="text-xs text-gray-500 block mb-2">Position</label>
-                          <div className="grid grid-cols-2 gap-2">
-                            <input type="number" placeholder="X" className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-xs text-white" />
-                            <input type="number" placeholder="Y" className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-xs text-white" />
+                    {selectedClipId ? (() => {
+                      const selectedClip = clips.find(clip => clip.id === selectedClipId)
+                      if (!selectedClip) return null
+                      
+                      return (
+                        <>
+                          <div>
+                            <label className="text-xs text-gray-500 block mb-2">Clip Name</label>
+                            <input 
+                              type="text" 
+                              value={selectedClip.name}
+                              onChange={(e) => updateClip(selectedClipId, { name: e.target.value })}
+                              className="w-full px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-xs text-white"
+                            />
                           </div>
-                        </div>
+                          
+                          {/* Reset Button */}
+                          <div className="pt-3 pb-4 border-t border-zinc-800">
+                            <button
+                              onClick={() => {
+                                setVideoTools({
+                                  cropWidth: 100,
+                                  cropHeight: 100,
+                                  rotation: 0,
+                                  opacity: 100,
+                                  speed: 1,
+                                  volume: 1,
+                                  positionX: 0,
+                                  positionY: 0
+                                })
+                              }}
+                              className="w-full px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-white text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2 border border-zinc-600"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              Reset All Properties
+                            </button>
+                          </div>
                         <div>
                           <label className="text-xs text-gray-500 block mb-2">Scale: {videoTools.cropWidth}%</label>
                           <input 
@@ -1918,25 +2695,25 @@ const VideoEditor = () => {
                           />
                         </div>
                         <div>
-                          <label className="text-xs text-gray-500 block mb-2">Rotation</label>
+                          <label className="text-xs text-gray-500 block mb-2">Rotation: {videoTools.rotation || 0}°</label>
                           <input 
                             type="range" 
                             min="-180" 
                             max="180" 
-                            defaultValue="0" 
+                            value={videoTools.rotation || 0}
+                            onChange={(e) => setVideoTools({...videoTools, rotation: parseInt(e.target.value)})}
                             className="w-full accent-white" 
-                            onChange={(e) => console.log('Rotation:', e.target.value)}
                           />
                         </div>
                         <div>
-                          <label className="text-xs text-gray-500 block mb-2">Opacity</label>
+                          <label className="text-xs text-gray-500 block mb-2">Opacity: {videoTools.opacity || 100}%</label>
                           <input 
                             type="range" 
                             min="0" 
                             max="100" 
-                            defaultValue="100" 
+                            value={videoTools.opacity || 100}
+                            onChange={(e) => setVideoTools({...videoTools, opacity: parseInt(e.target.value)})}
                             className="w-full accent-white" 
-                            onChange={(e) => console.log('Opacity:', e.target.value)}
                           />
                         </div>
                         <div>
@@ -1951,22 +2728,26 @@ const VideoEditor = () => {
                             className="w-full accent-white" 
                           />
                         </div>
-                        <div>
-                          <label className="text-xs text-gray-500 block mb-2">Volume: {Math.round(videoTools.volume * 100)}%</label>
-                          <input 
-                            type="range" 
-                            min="0" 
-                            max="2" 
-                            step="0.1"
-                            value={videoTools.volume}
-                            onChange={(e) => setVideoTools({...videoTools, volume: parseFloat(e.target.value)})}
-                            className="w-full accent-white" 
-                          />
+                        </>
+                      )
+                    })() : (
+                      <div className="text-center py-8 text-gray-500 text-sm space-y-4">
+                        <div className="w-16 h-16 mx-auto bg-gray-800 rounded-lg flex items-center justify-center mb-4">
+                          <Video className="w-8 h-8 text-gray-600" />
                         </div>
-                      </>
-                    ) : (
-                      <div className="text-center py-8 text-gray-500 text-sm">
-                        Select a clip to edit properties
+                        <p className="font-medium">No clip selected</p>
+                        <p className="text-xs text-gray-600 leading-relaxed">
+                          Upload a video file or drag & drop media to the timeline, then click on a clip to edit its properties.
+                        </p>
+                        <div className="pt-2">
+                          <button
+                            onClick={handleUploadClick}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors flex items-center gap-2 mx-auto"
+                          >
+                            <Upload className="w-4 h-4" />
+                            Upload Media
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2486,7 +3267,7 @@ const VideoEditor = () => {
 
                 {activeRightTab === 'ai-assistant' && (
                   <div className="h-full flex flex-col -m-4">
-                    <LocalAIAssistant isOpen={true} onClose={() => {}} isInSidebar={true} />
+                    <VideoEditorAI isOpen={true} isInSidebar={true} />
                   </div>
                 )}
               </div>
@@ -2509,7 +3290,8 @@ const VideoEditor = () => {
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.15 }}
               className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl overflow-hidden z-50"
-              style={{ left: contextMenu.x, top: contextMenu.y }}
+              style={{ left: (contextMenuPos?.x ?? contextMenu.x), top: (contextMenuPos?.y ?? contextMenu.y) }}
+              ref={contextMenuRef}
             >
               <button
                 onClick={handleSplitClip}
@@ -2537,6 +3319,115 @@ const VideoEditor = () => {
           </>
         )}
       </AnimatePresence>
+
+      {/* VEdit2.0 AI Assistant - Bottom Left */}
+      <VideoEditorVAPIAssistant />
+
+      {/* Export Panel */}
+      {showExportPanel && (
+        <ExportPanel
+          projectId={projectName || 'default-project'}
+          duration={duration}
+          onClose={() => setShowExportPanel(false)}
+        />
+      )}
+
+      {/* Keyboard Shortcuts Help */}
+      {showShortcuts && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-700 w-full max-w-2xl max-h-[80vh] overflow-y-auto"
+          >
+            <div className="p-6 border-b border-zinc-700">
+              <div className="flex items-center justify-between">
+                <h2 className="text-white font-bold text-xl">Keyboard Shortcuts</h2>
+                <button
+                  onClick={() => setShowShortcuts(false)}
+                  className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-400" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-6">
+              <div>
+                <h3 className="text-white font-semibold mb-3">Playback</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Space</span>
+                    <span className="text-white">Play/Pause</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">← →</span>
+                    <span className="text-white">Skip 1s</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Shift + ← →</span>
+                    <span className="text-white">Fine control (0.1s)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">M</span>
+                    <span className="text-white">Mute/Unmute</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="text-white font-semibold mb-3">Editing</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">C</span>
+                    <span className="text-white">Toggle Cut Mode</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">X</span>
+                    <span className="text-white">Split Clip</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">D</span>
+                    <span className="text-white">Duplicate Clip</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Delete</span>
+                    <span className="text-white">Delete Clip</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="text-white font-semibold mb-3">General</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">G</span>
+                    <span className="text-white">Toggle Grid</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">S</span>
+                    <span className="text-white">Save Project</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Ctrl+Z</span>
+                    <span className="text-white">Undo</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Ctrl+Y</span>
+                    <span className="text-white">Redo</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
     </div>
   )
 }

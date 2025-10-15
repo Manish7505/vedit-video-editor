@@ -1,9 +1,8 @@
 import React, { useState } from 'react'
 import { Subtitles, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
-import { transcriptionService } from '../services/transcriptionService'
-import { openRouterService } from '../services/openRouterService'
+import { openRouterService } from '../services/openRouter'
 import { freeTranscriptionService } from '../services/freeTranscriptionService'
-import { testApiKey, validateOpenAIKey } from '../utils/apiKeyTest'
+import { testApiKey } from '../utils/apiKeyTest'
 
 interface AutoCaptionButtonProps {
   videoFile?: File

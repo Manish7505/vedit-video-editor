@@ -42,6 +42,39 @@ interface VideoEditorContextType {
   setSelectedClipId: (id: string | null) => void
   sidebarOpen: boolean
   setSidebarOpen: (open: boolean) => void
+  
+  // Editing States
+  adjustments: Record<string, any>
+  setAdjustments: (adjustments: Record<string, any>) => void
+  activeFilters: string[]
+  setActiveFilters: (filters: string[]) => void
+  activeEffects: string[]
+  setActiveEffects: (effects: string[]) => void
+  videoTools: Record<string, any>
+  setVideoTools: (tools: Record<string, any>) => void
+  textOverlays: Array<{
+    id: string
+    text: string
+    x: number
+    y: number
+    fontSize: number
+    color: string
+  }>
+  setTextOverlays: (overlays: Array<{
+    id: string
+    text: string
+    x: number
+    y: number
+    fontSize: number
+    color: string
+  }>) => void
+  
+  // Undo/Redo
+  canUndo: boolean
+  canRedo: boolean
+  undo: () => void
+  redo: () => void
+  initializeHistory: () => void
 }
 
 const VideoEditorContext = createContext<VideoEditorContextType | undefined>(undefined)
@@ -102,6 +135,25 @@ export const VideoEditorProvider = ({ children }: VideoEditorProviderProps) => {
     setSelectedClipId: store.setSelectedClipId,
     sidebarOpen: store.sidebarOpen,
     setSidebarOpen: store.setSidebarOpen,
+    
+    // Editing States
+    adjustments: store.adjustments,
+    setAdjustments: store.setAdjustments,
+    activeFilters: store.activeFilters,
+    setActiveFilters: store.setActiveFilters,
+    activeEffects: store.activeEffects,
+    setActiveEffects: store.setActiveEffects,
+    videoTools: store.videoTools,
+    setVideoTools: store.setVideoTools,
+    textOverlays: store.textOverlays,
+    setTextOverlays: store.setTextOverlays,
+    
+    // Undo/Redo
+    canUndo: store.canUndo,
+    canRedo: store.canRedo,
+    undo: store.undo,
+    redo: store.redo,
+    initializeHistory: store.initializeHistory,
   }
 
   return (
@@ -132,8 +184,10 @@ export interface Clip {
   duration: number
   file?: File
   url?: string
+  originalUrl?: string
   content?: string
   waveform?: number[]
+  filters?: Record<string, any>
 }
 
 export interface ChatMessage {

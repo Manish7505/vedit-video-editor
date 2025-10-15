@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react'
-import Vapi from '@vapi-ai/web'
+import React, { useState, useEffect, useRef } from 'react'
 
 const VAPITest: React.FC = () => {
   const [status, setStatus] = useState('Initializing...')
   const [error, setError] = useState<string | null>(null)
-  const [vapi, setVapi] = useState<any>(null)
   const [isConnected, setIsConnected] = useState(false)
+  const vapiRef = useRef<any>(null)
 
   const publicKey = import.meta.env.VITE_VAPI_PUBLIC_KEY || ''
   const workflowId = import.meta.env.VITE_VAPI_WORKFLOW_ID || ''
@@ -28,21 +27,32 @@ const VAPITest: React.FC = () => {
         }
 
         setStatus('Initializing VAPI...')
+        
+        // Dynamically import VAPI for better error handling
+        const Vapi = (await import('@vapi-ai/web')).default
+        console.log('🔧 Initializing VAPI Test with public key:', publicKey.substring(0, 8) + '...')
+        
         const vapiInstance = new Vapi(publicKey)
-        setVapi(vapiInstance)
+        vapiRef.current = vapiInstance
+
+        // Note: Audio settings configuration may not be available in all VAPI versions
+        // The VAPI SDK handles audio configuration internally
 
         // Set up event listeners
         vapiInstance.on('call-start', () => {
+          console.log('✅ VAPI Test Call started successfully')
           setStatus('✅ Call started successfully!')
           setIsConnected(true)
         })
 
         vapiInstance.on('call-end', () => {
+          console.log('📞 VAPI Test Call ended')
           setStatus('📞 Call ended')
           setIsConnected(false)
         })
 
         vapiInstance.on('error', (error: any) => {
+          console.error('❌ VAPI Test Error:', error)
           setError(`VAPI Error: ${error.message || 'Unknown error'}`)
           setStatus('❌ Error occurred')
           setIsConnected(false)
@@ -52,16 +62,29 @@ const VAPITest: React.FC = () => {
         setError(null)
 
       } catch (err: any) {
+        console.error('❌ VAPI Test Initialization failed:', err)
         setError(`Failed to initialize VAPI: ${err.message}`)
         setStatus('❌ Initialization failed')
       }
     }
 
     testVAPI()
+
+    // Cleanup function
+    return () => {
+      if (vapiRef.current) {
+        try {
+          vapiRef.current.stop()
+        } catch (err) {
+          console.error('Error during VAPI cleanup:', err)
+        }
+        vapiRef.current = null
+      }
+    }
   }, [publicKey, workflowId])
 
   const startCall = async () => {
-    if (!vapi) {
+    if (!vapiRef.current) {
       setError('VAPI not initialized')
       return
     }
@@ -71,12 +94,12 @@ const VAPITest: React.FC = () => {
       setError(null)
 
       // Try as assistantId first
-      await vapi.start({ assistantId: workflowId })
+      await vapiRef.current.start({ assistantId: workflowId })
     } catch (err: any) {
       console.error('Failed with assistantId, trying workflowId...')
       try {
         // Try as workflowId
-        await vapi.start({ workflowId: workflowId })
+        await vapiRef.current.start({ workflowId: workflowId })
       } catch (retryErr: any) {
         setError(`Failed to start call: ${retryErr.message || 'Unknown error'}`)
         setStatus('❌ Call failed')
@@ -85,9 +108,9 @@ const VAPITest: React.FC = () => {
   }
 
   const endCall = async () => {
-    if (vapi) {
+    if (vapiRef.current) {
       try {
-        await vapi.stop()
+        await vapiRef.current.stop()
         setStatus('Call ended')
         setIsConnected(false)
       } catch (err) {
@@ -139,7 +162,7 @@ const VAPITest: React.FC = () => {
       <div className="mt-4 flex gap-2">
         <button
           onClick={startCall}
-          disabled={!vapi || isConnected}
+          disabled={!vapiRef.current || isConnected}
           className="px-3 py-1 bg-blue-500 text-white rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Start Call
@@ -147,7 +170,7 @@ const VAPITest: React.FC = () => {
         
         <button
           onClick={endCall}
-          disabled={!vapi || !isConnected}
+          disabled={!vapiRef.current || !isConnected}
           className="px-3 py-1 bg-red-500 text-white rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
           End Call

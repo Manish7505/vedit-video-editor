@@ -1,6 +1,24 @@
 import { create } from 'zustand'
 import { Track, Clip, ChatMessage } from '../contexts/VideoEditorContext'
 
+interface HistoryState {
+  tracks: Track[]
+  clips: Clip[]
+  adjustments: Record<string, any>
+  activeFilters: string[]
+  activeEffects: string[]
+  videoTools: Record<string, any>
+  textOverlays: Array<{
+    id: string
+    text: string
+    x: number
+    y: number
+    fontSize: number
+    color: string
+  }>
+  timestamp: number
+}
+
 interface VideoEditorState {
   // Project state
   projectName: string
@@ -42,6 +60,42 @@ interface VideoEditorState {
   setSelectedClipId: (id: string | null) => void
   sidebarOpen: boolean
   setSidebarOpen: (open: boolean) => void
+  
+  // Editing States
+  adjustments: Record<string, any>
+  setAdjustments: (adjustments: Record<string, any>) => void
+  activeFilters: string[]
+  setActiveFilters: (filters: string[]) => void
+  activeEffects: string[]
+  setActiveEffects: (effects: string[]) => void
+  videoTools: Record<string, any>
+  setVideoTools: (tools: Record<string, any>) => void
+  textOverlays: Array<{
+    id: string
+    text: string
+    x: number
+    y: number
+    fontSize: number
+    color: string
+  }>
+  setTextOverlays: (overlays: Array<{
+    id: string
+    text: string
+    x: number
+    y: number
+    fontSize: number
+    color: string
+  }>) => void
+  
+  // Undo/Redo
+  history: HistoryState[]
+  historyIndex: number
+  canUndo: boolean
+  canRedo: boolean
+  saveToHistory: () => void
+  undo: () => void
+  redo: () => void
+  initializeHistory: () => void
 }
 
 export const useVideoEditorStore = create<VideoEditorState>((set) => ({
@@ -75,20 +129,29 @@ export const useVideoEditorStore = create<VideoEditorState>((set) => ({
       ...track,
       id: `track-${Date.now()}`
     }
-    set((state) => ({ tracks: [...state.tracks, newTrack] }))
+    set((state) => {
+      const newState = { tracks: [...state.tracks, newTrack] }
+      return newState
+    })
   },
   removeTrack: (id) => {
-    set((state) => ({
-      tracks: state.tracks.filter(track => track.id !== id),
-      clips: state.clips.filter(clip => clip.trackId !== id)
-    }))
+    set((state) => {
+      const newState = {
+        tracks: state.tracks.filter(track => track.id !== id),
+        clips: state.clips.filter(clip => clip.trackId !== id)
+      }
+      return newState
+    })
   },
   updateTrack: (id, updates) => {
-    set((state) => ({
-      tracks: state.tracks.map(track =>
-        track.id === id ? { ...track, ...updates } : track
-      )
-    }))
+    set((state) => {
+      const newState = {
+        tracks: state.tracks.map(track =>
+          track.id === id ? { ...track, ...updates } : track
+        )
+      }
+      return newState
+    })
   },
   
   // Clips
@@ -98,10 +161,16 @@ export const useVideoEditorStore = create<VideoEditorState>((set) => ({
       ...clip,
       id: `clip-${Date.now()}`
     }
-    set((state) => ({ clips: [...state.clips, newClip] }))
+    set((state) => {
+      const newState = { clips: [...state.clips, newClip] }
+      return newState
+    })
   },
   removeClip: (id) => {
-    set((state) => ({ clips: state.clips.filter(clip => clip.id !== id) }))
+    set((state) => {
+      const newState = { clips: state.clips.filter(clip => clip.id !== id) }
+      return newState
+    })
   },
   updateClip: (id, updates) => {
     set((state) => ({
@@ -154,4 +223,151 @@ export const useVideoEditorStore = create<VideoEditorState>((set) => ({
   setSelectedClipId: (id) => set({ selectedClipId: id }),
   sidebarOpen: true,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  
+  // Editing States
+  adjustments: {
+    brightness: 0,
+    contrast: 0,
+    saturation: 0,
+    exposure: 0,
+    hue: 0,
+    blur: 0,
+    sharpen: 0,
+    filmGrain: 0,
+    vignette: 0
+  },
+  setAdjustments: (adjustments) => {
+    set({ adjustments })
+  },
+  activeFilters: [],
+  setActiveFilters: (filters) => {
+    set({ activeFilters: filters })
+  },
+  activeEffects: [],
+  setActiveEffects: (effects) => {
+    set({ activeEffects: effects })
+  },
+  videoTools: {
+    trimStart: 0,
+    trimEnd: 0,
+    cropX: 0,
+    cropY: 0,
+    cropWidth: 100,
+    cropHeight: 100,
+    speed: 1,
+    volume: 1,
+    rotation: 0,
+    opacity: 100
+  },
+  setVideoTools: (tools) => {
+    set({ videoTools: tools })
+  },
+  textOverlays: [],
+  setTextOverlays: (overlays) => {
+    set({ textOverlays: overlays })
+  },
+  
+  // Undo/Redo
+  history: [],
+  historyIndex: -1,
+  canUndo: false,
+  canRedo: false,
+  saveToHistory: () => {
+    set((state) => {
+      const newHistoryState: HistoryState = {
+        tracks: JSON.parse(JSON.stringify(state.tracks)),
+        clips: JSON.parse(JSON.stringify(state.clips)),
+        adjustments: JSON.parse(JSON.stringify(state.adjustments)),
+        activeFilters: JSON.parse(JSON.stringify(state.activeFilters)),
+        activeEffects: JSON.parse(JSON.stringify(state.activeEffects)),
+        videoTools: JSON.parse(JSON.stringify(state.videoTools)),
+        textOverlays: JSON.parse(JSON.stringify(state.textOverlays)),
+        timestamp: Date.now()
+      }
+      
+      // Remove any history after current index (handle initial state)
+      const newHistory = state.historyIndex >= 0 
+        ? state.history.slice(0, state.historyIndex + 1)
+        : []
+      newHistory.push(newHistoryState)
+      
+      // Limit history to 50 states
+      const limitedHistory = newHistory.slice(-50)
+      
+      return {
+        history: limitedHistory,
+        historyIndex: limitedHistory.length - 1,
+        canUndo: limitedHistory.length > 1,
+        canRedo: false
+      }
+    })
+  },
+  undo: () => {
+    set((state) => {
+      if (state.historyIndex > 0) {
+        const newIndex = state.historyIndex - 1
+        const historyState = state.history[newIndex]
+        
+        return {
+          tracks: JSON.parse(JSON.stringify(historyState.tracks)),
+          clips: JSON.parse(JSON.stringify(historyState.clips)),
+          adjustments: JSON.parse(JSON.stringify(historyState.adjustments)),
+          activeFilters: JSON.parse(JSON.stringify(historyState.activeFilters)),
+          activeEffects: JSON.parse(JSON.stringify(historyState.activeEffects)),
+          videoTools: JSON.parse(JSON.stringify(historyState.videoTools)),
+          textOverlays: JSON.parse(JSON.stringify(historyState.textOverlays)),
+          historyIndex: newIndex,
+          canUndo: newIndex > 0,
+          canRedo: true
+        }
+      }
+      return state
+    })
+  },
+  redo: () => {
+    set((state) => {
+      if (state.historyIndex < state.history.length - 1) {
+        const newIndex = state.historyIndex + 1
+        const historyState = state.history[newIndex]
+        
+        return {
+          tracks: JSON.parse(JSON.stringify(historyState.tracks)),
+          clips: JSON.parse(JSON.stringify(historyState.clips)),
+          adjustments: JSON.parse(JSON.stringify(historyState.adjustments)),
+          activeFilters: JSON.parse(JSON.stringify(historyState.activeFilters)),
+          activeEffects: JSON.parse(JSON.stringify(historyState.activeEffects)),
+          videoTools: JSON.parse(JSON.stringify(historyState.videoTools)),
+          textOverlays: JSON.parse(JSON.stringify(historyState.textOverlays)),
+          historyIndex: newIndex,
+          canUndo: true,
+          canRedo: newIndex < state.history.length - 1
+        }
+      }
+      return state
+    })
+  },
+  initializeHistory: () => {
+    set((state) => {
+      if (state.history.length === 0) {
+        const initialHistoryState: HistoryState = {
+          tracks: JSON.parse(JSON.stringify(state.tracks)),
+          clips: JSON.parse(JSON.stringify(state.clips)),
+          adjustments: JSON.parse(JSON.stringify(state.adjustments)),
+          activeFilters: JSON.parse(JSON.stringify(state.activeFilters)),
+          activeEffects: JSON.parse(JSON.stringify(state.activeEffects)),
+          videoTools: JSON.parse(JSON.stringify(state.videoTools)),
+          textOverlays: JSON.parse(JSON.stringify(state.textOverlays)),
+          timestamp: Date.now()
+        }
+        
+        return {
+          history: [initialHistoryState],
+          historyIndex: 0,
+          canUndo: false,
+          canRedo: false
+        }
+      }
+      return state
+    })
+  }
 }))

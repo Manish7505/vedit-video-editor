@@ -1,0 +1,41 @@
+services:
+  # Backend Service
+  - type: web
+    name: vedit-backend
+    env: node
+    plan: free
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: MONGODB_URI
+        value: mongodb://localhost:27017/vedit
+    healthCheckPath: /api/health
+
+  # Frontend Service  
+  - type: web
+    name: vedit-frontend
+    env: static
+    plan: free
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: VITE_VAPI_PUBLIC_KEY
+        sync: false
+      - key: VITE_VAPI_WORKFLOW_ID
+        sync: false
+      - key: VITE_VAPI_VIDEO_PUBLIC_KEY
+        sync: false
+      - key: VITE_VAPI_VIDEO_WORKFLOW_ID
+        sync: false
+      - key: VITE_VAPI_VIDEO_ASSISTANT_ID
+        sync: false
+      - key: VITE_OPENROUTER_API_KEY
+        sync: false

@@ -22,6 +22,42 @@ const VideoCanvas = () => {
   const [volume] = useState(1)
   const [isMuted, setIsMuted] = useState(false)
 
+  // Build CSS filter string from clip.filters
+  const buildFilterString = (filters?: Record<string, any>) => {
+    if (!filters) return ''
+    const brightness = filters.brightness ?? 100
+    const contrast = filters.contrast ?? 100
+    const saturation = filters.saturation ?? 100
+    const extra: string[] = []
+    
+    // Basic effects
+    if (filters.blur) extra.push('blur(5px)')
+    if (filters.sepia) extra.push('sepia(100%)')
+    if (filters.grayscale) extra.push('grayscale(100%)')
+    if (filters.invert) extra.push('invert(100%)')
+    
+    // Advanced effects
+    if (filters.vintage) extra.push('sepia(50%) contrast(110%) brightness(110%)')
+    if (filters.warm) extra.push('sepia(30%) saturate(130%)')
+    if (filters.cool) extra.push('hue-rotate(180deg) saturate(110%)')
+    if (filters.neon) extra.push('brightness(120%) saturate(150%) contrast(120%)')
+    if (filters.dramatic) extra.push('contrast(140%) brightness(85%) saturate(130%) sepia(25%)')
+    if (filters.cinematic) extra.push('contrast(120%) saturate(110%) brightness(95%) sepia(20%)')
+    if (filters.film_grain) extra.push('contrast(110%) brightness(105%) saturate(90%)')
+    
+    // Color grading
+    if (filters.colorGrading === 'cinematic') extra.push('contrast(120%) saturate(110%) brightness(95%) sepia(20%)')
+    if (filters.colorGrading === 'warm') extra.push('sepia(30%) saturate(130%) brightness(105%) hue-rotate(10deg)')
+    if (filters.colorGrading === 'cool') extra.push('hue-rotate(180deg) saturate(110%) brightness(95%) contrast(110%)')
+    if (filters.colorGrading === 'high_contrast') extra.push('contrast(150%) brightness(90%) saturate(120%)')
+    if (filters.colorGrading === 'vintage') extra.push('sepia(50%) contrast(110%) brightness(110%) saturate(80%)')
+    if (filters.colorGrading === 'dramatic') extra.push('contrast(140%) brightness(85%) saturate(130%) sepia(25%)')
+    
+    return [`brightness(${brightness}%)`, `contrast(${contrast}%)`, `saturate(${saturation}%)`, ...extra]
+      .filter(Boolean)
+      .join(' ')
+  }
+
   // Render grid overlay
   const renderGrid = () => {
     if (!showGrid) return null
@@ -110,32 +146,50 @@ const VideoCanvas = () => {
                   className="absolute inset-0 flex items-center justify-center"
                 >
                   {clip.type === 'video' && (
-                    <div className="w-full h-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
-                      <div className="text-white text-center">
-                        <Play className="w-12 h-12 mx-auto mb-2" />
-                        <p className="text-sm">{clip.name}</p>
-                      </div>
-                    </div>
+                    <video
+                      data-clip-id={clip.id}
+                      src={clip.url}
+                      className="w-full h-full object-contain bg-black"
+                      muted
+                      controls={false}
+                      autoPlay
+                      loop
+                      style={{ filter: buildFilterString((clip as any).filters) }}
+                    />
                   )}
                   
                   {clip.type === 'image' && (
-                    <div className="w-full h-full bg-gradient-to-br from-green-600 to-blue-600 flex items-center justify-center">
-                      <div className="text-white text-center">
-                        <div className="w-12 h-12 mx-auto mb-2 bg-white/20 rounded flex items-center justify-center">
-                          📷
-                        </div>
-                        <p className="text-sm">{clip.name}</p>
-                      </div>
-                    </div>
+                    <img
+                      data-clip-id={clip.id}
+                      src={clip.url}
+                      alt={clip.name}
+                      className="w-full h-full object-contain bg-black"
+                      style={{ filter: buildFilterString((clip as any).filters) }}
+                    />
                   )}
                   
                   {clip.type === 'text' && (
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="text-white text-center p-4">
-                        <p className="text-2xl font-bold">{clip.content || clip.name}</p>
+                      <div 
+                        className="text-white text-center p-4"
+                        style={{
+                          position: 'absolute',
+                          fontSize: `${(clip as any).filters?.fontSize || 24}px`,
+                          color: (clip as any).filters?.color || 'white',
+                          textShadow: (clip as any).filters?.textShadow || '2px 2px 4px rgba(0,0,0,0.8)',
+                          fontWeight: 'bold',
+                          ...((clip as any).filters?.position === 'top' ? { top: '20px', left: '50%', transform: 'translateX(-50%)' } : {}),
+                          ...((clip as any).filters?.position === 'bottom' ? { bottom: '20px', left: '50%', transform: 'translateX(-50%)' } : {}),
+                          ...((clip as any).filters?.position === 'center' ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' } : {})
+                        }}
+                      >
+                        <p>{clip.content || clip.name}</p>
                       </div>
                     </div>
                   )}
+                  
+                  {/* AI Text Overlays - these are added dynamically by the AI */}
+                  <div className="ai-text-overlays"></div>
                 </div>
               ))}
             </div>

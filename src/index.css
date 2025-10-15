@@ -219,35 +219,38 @@
   color: rgba(255,255,255,0.8) !important;
 }
 
-/* AI Assistant Scrollbar */
+/* AI Assistant Scrollbar - Dark Theme */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+  scrollbar-color: rgba(75, 85, 99, 0.5) transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(156, 163, 175, 0.5);
-  border-radius: 3px;
-  transition: background 0.2s ease;
+  background: rgba(75, 85, 99, 0.4);
+  border-radius: 4px;
+  transition: background 0.3s ease;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(156, 163, 175, 0.8);
+  background: rgba(75, 85, 99, 0.7);
+  background-clip: padding-box;
 }
 
 /* Dark theme scrollbar for sidebar */
 .ai-assistant-sidebar .custom-scrollbar {
-  scrollbar-color: rgba(75, 85, 99, 0.5) transparent;
+  scrollbar-color: rgba(75, 85, 99, 0.6) transparent;
 }
 
 .ai-assistant-sidebar .custom-scrollbar::-webkit-scrollbar-thumb {

@@ -1,21 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Download,
-  Settings,
-  Film,
-  Monitor,
-  Smartphone,
   Loader2,
-  CheckCircle,
-  XCircle,
-  Clock,
-  Youtube,
-  Instagram,
-  Send
+  X
 } from 'lucide-react'
-import { cloudRenderer } from '../services/cloudRenderer'
-import type { ExportJob, CloudRenderOptions } from '../types/publishing'
+import toast from 'react-hot-toast'
+import { useVideoEditor } from '../contexts/VideoEditorContext'
+import { startRenderJob, getRenderStatus } from '../services/renderService'
 
 interface ExportPanelProps {
   projectId: string
@@ -24,296 +16,401 @@ interface ExportPanelProps {
 }
 
 const ExportPanel = ({ projectId, duration, onClose }: ExportPanelProps) => {
-  const [exportJobs, setExportJobs] = useState<ExportJob[]>([])
-  const [selectedResolution, setSelectedResolution] = useState<'4k' | '1080p' | '720p' | '480p' | 'mobile'>('1080p')
-  const [selectedFormat, setSelectedFormat] = useState<'mp4' | 'mov' | 'webm' | 'avi'>('mp4')
-  const [selectedQuality, setSelectedQuality] = useState<'high' | 'medium' | 'low'>('high')
+  const { clips } = useVideoEditor()
   const [isExporting, setIsExporting] = useState(false)
+  const [progress, setProgress] = useState<number | null>(null)
+  const [preset, setPreset] = useState<'youtube' | 'tiktok_9_16' | 'instagram_square' | 'lossless'>('youtube')
+  const [burnInCaptions, setBurnInCaptions] = useState<boolean>(false)
+  const [srtContent, setSrtContent] = useState<string>('')
+  const [useFallbackExport, setUseFallbackExport] = useState<boolean>(false)
+  // Suppress unused prop warnings while keeping the signature stable
+  void projectId
+  void duration
 
-  useEffect(() => {
-    loadExportJobs()
-    const interval = setInterval(loadExportJobs, 1000)
-    return () => clearInterval(interval)
-  }, [projectId])
+  // Fallback export function for when backend is not available
+  const handleFallbackExport = async () => {
+    setIsExporting(true)
+    setProgress(0)
+    
+    try {
+      const renderable = clips
+        .filter(c => (c.type === 'video' || c.type === 'audio') && c.url)
+        .sort((a, b) => a.startTime - b.startTime)
 
-  const loadExportJobs = () => {
-    const jobs = cloudRenderer.getProjectExportJobs(projectId)
-    setExportJobs(jobs)
+      if (renderable.length === 0) {
+        toast.error('❌ No media to export. Please add video/audio clips to the timeline first.', {
+          duration: 5000,
+        })
+        setIsExporting(false)
+        setProgress(null)
+        return
+      }
+
+      toast.success('📁 Preparing files for download...')
+      setProgress(25)
+
+      // Simulate processing
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      setProgress(50)
+
+      // Create a simple download of the first video file
+      const firstVideo = renderable.find(c => c.type === 'video')
+      if (firstVideo) {
+        const link = document.createElement('a')
+        link.href = firstVideo.url as string
+        link.download = `vedit-${preset}-${new Date().toISOString().slice(0, 10)}.mp4`
+        link.target = '_blank'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        
+        setProgress(100)
+        toast.success('📥 Video file downloaded! (Fallback mode - full rendering requires backend server)')
+        setIsExporting(false)
+        setProgress(null)
+        onClose?.()
+      } else {
+        toast.error('❌ No video files found to download.')
+        setIsExporting(false)
+        setProgress(null)
+      }
+
+    } catch (error) {
+      console.error('Fallback export failed:', error)
+      toast.error('❌ Fallback export failed. Please try again.')
+      setIsExporting(false)
+      setProgress(null)
+    }
   }
 
   const handleExport = async () => {
+    if (useFallbackExport) {
+      return handleFallbackExport()
+    }
+
     setIsExporting(true)
+    setProgress(0)
+    
     try {
-      const options: CloudRenderOptions = {
-        resolution: selectedResolution,
-        format: selectedFormat,
-        quality: selectedQuality,
-        fps: 30,
-        codec: 'h264'
+      const renderable = clips
+        .filter(c => (c.type === 'video' || c.type === 'audio') && c.url)
+        .sort((a, b) => a.startTime - b.startTime)
+
+      if (renderable.length === 0) {
+        toast.error('❌ No media to export. Please add video/audio clips to the timeline first.', {
+          duration: 5000,
+        })
+        setIsExporting(false)
+        setProgress(null)
+        return
       }
 
-      await cloudRenderer.createExportJob(projectId, options)
-      loadExportJobs()
+      toast.success('🚀 Starting video export...')
+
+      const body = {
+        clips: renderable.map(c => ({
+          url: (c as any).originalUrl ? (c as any).originalUrl as string : (c.url as string),
+          startTime: c.startTime,
+          endTime: c.endTime
+        }))
+      }
+
+      // Start background render
+      const start = await startRenderJob({
+        clips: body.clips,
+        duration,
+        preset,
+        burnInCaptions,
+        srtContent: burnInCaptions && srtContent.trim() ? srtContent : undefined
+      })
+      
+      if (!start.ok || !start.jobId) {
+        toast.error(`❌ Backend server not available. Switching to fallback mode...`)
+        setUseFallbackExport(true)
+        setIsExporting(false)
+        setProgress(null)
+        return
+      }
+
+      toast.success('✅ Render job started! Processing video...')
+      setProgress(5)
+
+      // Poll status with timeout
+      let pollCount = 0
+      const maxPolls = 300 // 5 minutes timeout
+      
+      const poll = async () => {
+        if (!start.jobId || pollCount >= maxPolls) {
+          if (pollCount >= maxPolls) {
+            toast.error('⏰ Export timeout. Please try again.')
+          }
+          setIsExporting(false)
+          setProgress(null)
+          return
+        }
+        
+        pollCount++
+        const status = await getRenderStatus(start.jobId)
+        
+        if (!status.ok || !status.job) {
+          toast.error(`❌ Failed to get render status: ${status.error || 'Unknown error'}`)
+          setIsExporting(false)
+          setProgress(null)
+          return
+        }
+        
+        setProgress(Math.max(5, status.job.progress))
+        
+        if (status.job.status === 'completed' && status.job.url) {
+          // Create download link
+          const link = document.createElement('a')
+          link.href = status.job.url
+          link.download = `vedit-${preset}-${new Date().toISOString().slice(0, 10)}.mp4`
+          link.target = '_blank'
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          
+          toast.success('🎉 Video exported successfully! Download started.')
+          setIsExporting(false)
+          setProgress(null)
+          onClose?.()
+          return
+        }
+        
+        if (status.job.status === 'failed') {
+          toast.error('❌ Video export failed. Please check your media files and try again.')
+          setIsExporting(false)
+          setProgress(null)
+          return
+        }
+        
+        // Continue polling
+        setTimeout(poll, 2000) // Poll every 2 seconds
+      }
+      
+      void poll()
+
     } catch (error) {
-      alert('Export failed. Please try again.')
-    } finally {
+      console.error('Export failed:', error)
+      toast.error('❌ Backend server not available. Switching to fallback mode...')
+      setUseFallbackExport(true)
       setIsExporting(false)
+      setProgress(null)
     }
   }
-
-  const handlePlatformExport = async (platform: 'youtube' | 'instagram' | 'tiktok') => {
-    setIsExporting(true)
-    try {
-      await cloudRenderer.exportForPlatform(projectId, platform)
-      loadExportJobs()
-    } catch (error) {
-      alert('Export failed. Please try again.')
-    } finally {
-      setIsExporting(false)
-    }
-  }
-
-  const handleMultiResolutionExport = async () => {
-    setIsExporting(true)
-    try {
-      await cloudRenderer.exportMultipleResolutions(projectId, ['4k', '1080p', '720p', 'mobile'])
-      loadExportJobs()
-    } catch (error) {
-      alert('Export failed. Please try again.')
-    } finally {
-      setIsExporting(false)
-    }
-  }
-
-  const estimatedTime = cloudRenderer.estimateRenderTime(duration, selectedResolution, selectedQuality)
-
-  const resolutions = [
-    { value: '4k', label: '4K Ultra HD', icon: Monitor, description: '3840x2160' },
-    { value: '1080p', label: 'Full HD', icon: Monitor, description: '1920x1080' },
-    { value: '720p', label: 'HD', icon: Monitor, description: '1280x720' },
-    { value: '480p', label: 'SD', icon: Film, description: '854x480' },
-    { value: 'mobile', label: 'Mobile', icon: Smartphone, description: '640x360' }
-  ]
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+    >
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-zinc-900 rounded-xl border border-zinc-800 max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-700 w-full max-w-md"
       >
         {/* Header */}
-        <div className="p-6 border-b border-zinc-800">
+        <div className="p-6 border-b border-zinc-700">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <Download className="w-6 h-6 text-green-500" />
-                Export & Render
-              </h2>
-              <p className="text-sm text-gray-400 mt-1">
-                Cloud-based rendering for multiple resolutions
-              </p>
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-gradient-to-br from-blue-600/20 to-indigo-600/20 rounded-xl">
+                <Download className="w-6 h-6 text-blue-400" />
+              </div>
+              <div>
+                <h2 className="text-white font-bold text-xl">Export Video</h2>
+                <p className="text-gray-400 text-sm">Choose preset and optional captions</p>
+              </div>
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors group"
             >
-              <XCircle className="w-5 h-5 text-gray-400" />
+              <X className="w-5 h-5 text-gray-400 group-hover:text-white" />
             </button>
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Quick Platform Export */}
-          <div>
-            <h3 className="text-lg font-semibold text-white mb-3">Quick Export for Platforms</h3>
-            <div className="grid grid-cols-3 gap-3">
+        <div className="p-6">
+          <div className="text-center">
+            <div className="mb-6">
+              <Download className="w-16 h-16 text-blue-400 mx-auto mb-4" />
+              <h3 className="text-white font-semibold text-lg mb-2">Render and Download</h3>
+              <p className="text-gray-400 text-sm">
+                {`Preset: ${
+                  preset === 'youtube' ? 'YouTube 1080p 16:9' :
+                  preset === 'tiktok_9_16' ? 'TikTok 1080x1920 9:16' :
+                  preset === 'instagram_square' ? 'Instagram 1080x1080' :
+                  'Lossless'
+                }`}
+                {burnInCaptions ? ' • Captions: Burn-in SRT' : ' • Captions: None'}
+              </p>
+              
+              {/* Media Status Indicator */}
+              {clips.length === 0 && (
+                <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                  <p className="text-yellow-400 text-sm font-medium mb-1">⚠️ No Media in Timeline</p>
+                  <p className="text-yellow-300/80 text-xs">
+                    Upload video/audio files using the "Upload Media" button in the left panel first
+                  </p>
+                </div>
+              )}
+              
+              {clips.length > 0 && (
+                <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <p className="text-green-400 text-sm font-medium">
+                    ✅ {clips.length} clip{clips.length > 1 ? 's' : ''} ready for export
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Preset Selection */}
+            <div className="grid grid-cols-2 gap-3 mb-5 text-left">
               <button
-                onClick={() => handlePlatformExport('youtube')}
-                disabled={isExporting}
-                className="p-4 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 rounded-lg transition-colors"
-              >
-                <Youtube className="w-8 h-8 text-red-500 mx-auto mb-2" />
-                <p className="text-white font-medium">YouTube</p>
-                <p className="text-xs text-gray-400">1080p, MP4</p>
+                onClick={() => setPreset('youtube')}
+                className={`p-3 rounded-lg border ${preset === 'youtube' ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 hover:bg-zinc-800'}`}>
+                <div className="text-sm font-semibold text-white">YouTube 1080p 16:9</div>
+                <div className="text-xs text-gray-400">H.264, ~8 Mbps</div>
               </button>
               <button
-                onClick={() => handlePlatformExport('instagram')}
-                disabled={isExporting}
-                className="p-4 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 rounded-lg transition-colors"
-              >
-                <Instagram className="w-8 h-8 text-pink-500 mx-auto mb-2" />
-                <p className="text-white font-medium">Instagram</p>
-                <p className="text-xs text-gray-400">1080p, MP4</p>
+                onClick={() => setPreset('tiktok_9_16')}
+                className={`p-3 rounded-lg border ${preset === 'tiktok_9_16' ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 hover:bg-zinc-800'}`}>
+                <div className="text-sm font-semibold text-white">TikTok 1080x1920 9:16</div>
+                <div className="text-xs text-gray-400">H.264, ~4-6 Mbps</div>
               </button>
               <button
-                onClick={() => handlePlatformExport('tiktok')}
-                disabled={isExporting}
-                className="p-4 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 rounded-lg transition-colors"
-              >
-                <Send className="w-8 h-8 text-cyan-500 mx-auto mb-2" />
-                <p className="text-white font-medium">TikTok</p>
-                <p className="text-xs text-gray-400">1080p, MP4</p>
+                onClick={() => setPreset('instagram_square')}
+                className={`p-3 rounded-lg border ${preset === 'instagram_square' ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 hover:bg-zinc-800'}`}>
+                <div className="text-sm font-semibold text-white">Instagram 1080x1080</div>
+                <div className="text-xs text-gray-400">Square, H.264</div>
+              </button>
+              <button
+                onClick={() => setPreset('lossless')}
+                className={`p-3 rounded-lg border ${preset === 'lossless' ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 hover:bg-zinc-800'}`}>
+                <div className="text-sm font-semibold text-white">Lossless</div>
+                <div className="text-xs text-gray-400">Visually lossless export</div>
               </button>
             </div>
-          </div>
 
-          {/* Custom Export Settings */}
-          <div>
-            <h3 className="text-lg font-semibold text-white mb-3">Custom Export</h3>
-            <div className="space-y-4">
-              {/* Resolution */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Resolution
-                </label>
-                <div className="grid grid-cols-5 gap-2">
-                  {resolutions.map((res) => {
-                    const Icon = res.icon
-                    return (
-                      <button
-                        key={res.value}
-                        onClick={() => setSelectedResolution(res.value as any)}
-                        className={`p-3 rounded-lg border-2 transition-all ${
-                          selectedResolution === res.value
-                            ? 'border-blue-500 bg-blue-500/10'
-                            : 'border-zinc-700 hover:border-zinc-600'
-                        }`}
-                      >
-                        <Icon className="w-6 h-6 mx-auto mb-1 text-gray-400" />
-                        <p className="text-xs text-white font-medium">{res.label}</p>
-                        <p className="text-xs text-gray-500">{res.description}</p>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Format & Quality */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Format
-                  </label>
-                  <select
-                    value={selectedFormat}
-                    onChange={(e) => setSelectedFormat(e.target.value as any)}
-                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="mp4">MP4 (H.264)</option>
-                    <option value="mov">MOV (ProRes)</option>
-                    <option value="webm">WebM (VP9)</option>
-                    <option value="avi">AVI</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Quality
-                  </label>
-                  <select
-                    value={selectedQuality}
-                    onChange={(e) => setSelectedQuality(e.target.value as any)}
-                    className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="high">High (Best Quality)</option>
-                    <option value="medium">Medium (Balanced)</option>
-                    <option value="low">Low (Smaller File)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Estimated Time */}
-              <div className="p-3 bg-zinc-800 rounded-lg flex items-center justify-between">
-                <span className="text-gray-300">Estimated Render Time:</span>
-                <span className="text-white font-medium flex items-center gap-2">
-                  <Clock className="w-4 h-4" />
-                  {Math.floor(estimatedTime / 60)}m {estimatedTime % 60}s
+            {/* Export Mode Toggle */}
+            <div className="mb-4 text-left">
+              <label className="flex items-center gap-2 text-sm text-white">
+                <input
+                  type="checkbox"
+                  className="accent-blue-500"
+                  checked={useFallbackExport}
+                  onChange={(e) => setUseFallbackExport(e.target.checked)}
+                />
+                <span className="flex items-center gap-2">
+                  📁 Simple Download Mode
+                  <span className="text-xs text-gray-400">(No server required)</span>
                 </span>
-              </div>
-
-              {/* Export Buttons */}
-              <div className="flex gap-3">
-                <button
-                  onClick={handleExport}
-                  disabled={isExporting}
-                  className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-medium flex items-center justify-center gap-2 transition-colors"
-                >
-                  {isExporting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Exporting...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-5 h-5" />
-                      Export
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={handleMultiResolutionExport}
-                  disabled={isExporting}
-                  className="flex-1 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-medium flex items-center justify-center gap-2 transition-colors"
-                >
-                  <Settings className="w-5 h-5" />
-                  Export All Resolutions
-                </button>
-              </div>
+              </label>
+              {useFallbackExport && (
+                <p className="text-xs text-yellow-400 mt-1">
+                  ⚠️ Downloads original video file without processing. For full rendering, ensure backend server is running.
+                </p>
+              )}
             </div>
+
+            {/* Captions options - only show if not in fallback mode */}
+            {!useFallbackExport && (
+              <div className="mb-5 text-left">
+                <label className="flex items-center gap-2 text-sm text-white">
+                  <input
+                    type="checkbox"
+                    className="accent-blue-500"
+                    checked={burnInCaptions}
+                    onChange={(e) => setBurnInCaptions(e.target.checked)}
+                  />
+                  Burn-in captions (SRT)
+                </label>
+                {burnInCaptions && (
+                  <textarea
+                    className="mt-2 w-full h-28 bg-zinc-950 border border-zinc-700 rounded-lg p-2 text-sm text-gray-200 placeholder:text-gray-500"
+                    placeholder={"Paste .srt content here (optional)"}
+                    value={srtContent}
+                    onChange={(e) => setSrtContent(e.target.value)}
+                  />
+                )}
+              </div>
+            )}
+            
+            {/* Progress Bar */}
+            {isExporting && progress !== null && (
+              <div className="mb-4">
+                <div className="flex justify-between text-sm text-gray-400 mb-2">
+                  <span>Rendering...</span>
+                  <span>{progress}%</span>
+                </div>
+                <div className="w-full bg-zinc-700 rounded-full h-2">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 to-indigo-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={handleExport}
+              disabled={isExporting || clips.length === 0}
+              className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white font-semibold flex items-center justify-center gap-3 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>
+                    {progress !== null ? `Rendering ${
+                      preset === 'youtube' ? '(YouTube 1080p)' :
+                      preset === 'tiktok_9_16' ? '(TikTok 9:16)' :
+                      preset === 'instagram_square' ? '(Instagram 1080x1080)' :
+                      '(Lossless)'
+                    }${burnInCaptions ? ' + Captions' : ''}... ${progress}%` :
+                    `Starting Render ${
+                      preset === 'youtube' ? '(YouTube 1080p)' :
+                      preset === 'tiktok_9_16' ? '(TikTok 9:16)' :
+                      preset === 'instagram_square' ? '(Instagram 1080x1080)' :
+                      '(Lossless)'
+                    }${burnInCaptions ? ' + Captions' : ''}...`}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-5 h-5" />
+                  <span>
+                    {useFallbackExport ? '📁 Download Video File' : '🎬 Export & Download Video'}
+                    {!useFallbackExport && preset === 'youtube' && ' (YouTube 1080p)'}
+                    {!useFallbackExport && preset === 'tiktok_9_16' && ' (TikTok 9:16)'}
+                    {!useFallbackExport && preset === 'instagram_square' && ' (Instagram 1080x1080)'}
+                    {!useFallbackExport && preset === 'lossless' && ' (Lossless)'}
+                    {!useFallbackExport && burnInCaptions && ' + Captions'}
+                  </span>
+                </>
+              )}
+            </button>
+
+            {/* Additional Download Info */}
+            {!isExporting && (
+              <div className="mt-3 text-center">
+                <p className="text-xs text-gray-500">
+                  {useFallbackExport 
+                    ? '💡 Downloads the original video file directly to your computer'
+                    : '💡 The video will be processed and automatically downloaded when ready'
+                  }
+                </p>
+              </div>
+            )}
           </div>
-
-          {/* Export Queue */}
-          {exportJobs.length > 0 && (
-            <div>
-              <h3 className="text-lg font-semibold text-white mb-3">Export Queue</h3>
-              <div className="space-y-2">
-                {exportJobs.map((job) => (
-                  <div
-                    key={job.id}
-                    className="p-4 bg-zinc-800 rounded-lg"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-3">
-                        {job.status === 'processing' && <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />}
-                        {job.status === 'completed' && <CheckCircle className="w-5 h-5 text-green-500" />}
-                        {job.status === 'failed' && <XCircle className="w-5 h-5 text-red-500" />}
-                        {job.status === 'queued' && <Clock className="w-5 h-5 text-gray-400" />}
-                        <div>
-                          <p className="text-white font-medium">{job.resolution} - {job.format.toUpperCase()}</p>
-                          <p className="text-xs text-gray-400 capitalize">{job.status}</p>
-                        </div>
-                      </div>
-                      {job.status === 'completed' && (
-                        <button
-                          onClick={() => cloudRenderer.downloadExport(job.id)}
-                          className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-white text-sm flex items-center gap-2 transition-colors"
-                        >
-                          <Download className="w-4 h-4" />
-                          Download
-                        </button>
-                      )}
-                    </div>
-                    {job.status === 'processing' && (
-                      <div className="w-full bg-zinc-700 rounded-full h-2">
-                        <div
-                          className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${job.progress}%` }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </motion.div>
-    </div>
+    </motion.div>
   )
 }
 
 export default ExportPanel
-

@@ -1,16 +1,24 @@
 import { Routes, Route } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-// Auth removed
+import { ClerkProvider, SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react'
 import HomePage from './pages/HomePage'
 import VideoEditor from './pages/VideoEditor'
 import Dashboard from './components/Dashboard'
 import { VideoEditorProvider } from './contexts/VideoEditorContext'
-// import VAPIAssistant from './components/VAPIAssistant'
-// import BeautifulVAPIAssistant from './components/BeautifulVAPIAssistant'
+import VAPIAssistant from './components/VAPIAssistant'
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  return <>{children}</>;
+  return (
+    <>
+      <SignedIn>
+        {children}
+      </SignedIn>
+      <SignedOut>
+        <RedirectToSignIn />
+      </SignedOut>
+    </>
+  );
 };
 
 // Public Route Component (no redirect - allow signed-in users to view homepage)
@@ -19,7 +27,14 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 function App() {
+  const publishableKey = "pk_test_Y2FyZWZ1bC1tb2xlLTEuY2xlcmsuYWNjb3VudHMuZGV2JA"
+
+  if (!publishableKey) {
+    throw new Error("Missing Publishable Key")
+  }
+
   return (
+    <ClerkProvider publishableKey={publishableKey}>
       <div className="min-h-screen bg-zinc-950">
         <Routes>
           <Route 
@@ -89,12 +104,13 @@ function App() {
           }}
         />
         
-        {/* VAPI AI Assistant - Disabled (requires API keys) */}
-        {/* <BeautifulVAPIAssistant 
+        {/* VAPI AI Assistant */}
+        <VAPIAssistant 
           workflowId={import.meta.env.VITE_VAPI_WORKFLOW_ID || ''}
           position="bottom-right"
-        /> */}
+        />
       </div>
+    </ClerkProvider>
   )
 }
 

@@ -2233,7 +2233,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
       <div className="flex-shrink-0 px-6 py-4 border-b border-gray-700/50 bg-gradient-to-r from-gray-800 to-gray-750">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 p-0.5">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 p-0.5">
             <div className="w-full h-full rounded-xl bg-gray-800 flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-white" />
             </div>

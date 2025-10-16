@@ -73,11 +73,11 @@ router.post('/chat', chatValidation, async (req, res) => {
     }
 
     try {
-      const systemPrompt = `You are a concise AI video editing assistant. Keep responses short and helpful.
+      const systemPrompt = `AI video editor. Be very brief.
 
-Current context: ${context}
+Context: ${context}
 
-Help with video editing only. Be brief and direct.`;
+Short responses only.`;
 
       const completion = await openrouter.chat.completions.create({
         model: DEFAULT_MODEL,
@@ -86,7 +86,7 @@ Help with video editing only. Be brief and direct.`;
           { role: 'user', content: message }
         ],
         temperature: 0.7,
-        max_tokens: 100,
+        max_tokens: 50,
       });
 
       const aiResponse = completion.choices[0].message.content;
@@ -209,11 +209,11 @@ Respond with ONLY the JSON object:`;
     // Route based on intent
     if (intentResult.intent === 'conversation') {
       // Handle as natural conversation
-      const conversationPrompt = `You are a friendly AI video editing assistant. Keep responses short and helpful.
+      const conversationPrompt = `AI video editor. Very brief responses.
 
-Current context: ${videoContext?.currentTime || 0}s / ${videoContext?.duration || 0}s, ${videoContext?.clipsCount || 0} clips
+Context: ${videoContext?.currentTime || 0}s / ${videoContext?.duration || 0}s, ${videoContext?.clipsCount || 0} clips
 
-Be brief and offer video editing help.`;
+Short answers only.`;
 
       const conversationCompletion = await openrouter.chat.completions.create({
         model: DEFAULT_MODEL,
@@ -222,7 +222,7 @@ Be brief and offer video editing help.`;
           { role: 'user', content: command }
         ],
         temperature: 0.7,
-        max_tokens: 80
+        max_tokens: 40
       });
 
       const conversationResponse = conversationCompletion.choices[0]?.message?.content;
@@ -259,7 +259,7 @@ Return ONLY JSON:`;
           { role: 'user', content: command }
         ],
         temperature: 0.1,
-        max_tokens: 100
+        max_tokens: 50
       });
 
       const aiResponse = commandCompletion.choices[0]?.message?.content;
@@ -304,11 +304,11 @@ Return ONLY JSON:`;
 
     } else if (intentResult.intent === 'multi_task') {
       // Handle as multi-task request
-      const multiTaskPrompt = `User wants multiple video tasks. Give brief, actionable steps.
+      const multiTaskPrompt = `Multiple video tasks. Brief steps.
 
 Context: ${videoContext?.currentTime || 0}s / ${videoContext?.duration || 0}s, ${videoContext?.clipsCount || 0} clips
 
-Be concise and helpful.`;
+Short steps only.`;
 
       const multiTaskCompletion = await openrouter.chat.completions.create({
         model: DEFAULT_MODEL,
@@ -317,7 +317,7 @@ Be concise and helpful.`;
           { role: 'user', content: command }
         ],
         temperature: 0.7,
-        max_tokens: 150
+        max_tokens: 80
       });
 
       const multiTaskResponse = multiTaskCompletion.choices[0]?.message?.content;

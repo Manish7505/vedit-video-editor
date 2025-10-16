@@ -5,7 +5,7 @@ nixPkgs = ["nodejs", "npm"]
 cmds = ["npm install", "cd server && npm install"]
 
 [phases.build]
-cmds = ["echo 'Backend build complete'"]
+cmds = ["npm run build"]
 
 [start]
 cmd = "npm start"

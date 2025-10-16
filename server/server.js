@@ -46,7 +46,9 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-// Removed proxy static mount
+
+// Serve frontend static files
+app.use(express.static(path.join(__dirname, '../dist')));
 
 // Routes
 // Note: auth routes are no longer needed with Clerk
@@ -116,25 +118,27 @@ io.on('connection', (socket) => {
 // Error handling
 app.use(errorHandler);
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ 
-    message: 'Route not found',
-    path: req.originalUrl,
-    method: req.method,
-    availableRoutes: [
-      'GET /api/health',
-      'POST /api/ai/chat',
-      'POST /api/ai/execute-command',
-      'GET /api/ai/status',
-      'POST /api/ai/suggestions',
-      'GET /api/users/profile',
-      'GET /api/projects',
-      'POST /api/projects',
-      'GET /api/files',
-      'POST /api/files/upload'
-    ]
-  });
+// SPA fallback - serve React app for all non-API routes
+app.get('*', (req, res) => {
+  // Skip API routes
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ 
+      message: 'API endpoint not found',
+      path: req.originalUrl,
+      method: req.method,
+      availableRoutes: [
+        'GET /api/health',
+        'POST /api/ai/chat',
+        'POST /api/ai/execute-command',
+        'GET /api/ai/status',
+        'POST /api/ai/suggestions',
+        'POST /api/files/upload'
+      ]
+    });
+  }
+  
+  // Serve React app for all other routes
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
 const PORT = Number(process.env.PORT || 8080);

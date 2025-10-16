@@ -7,10 +7,10 @@
     "dev": "vite",
     "dev:server": "cd server && npm run dev",
     "dev:full": "concurrently \"npm run dev\" \"npm run dev:server\"",
-    "build": "npm run build:server && npm run build:frontend",
+    "build": "npm run build:frontend && npm run build:server",
     "build:frontend": "npx vite build",
     "build:server": "cd server && npm install",
-    "build:full": "npm run build:server && npm run build",
+    "build:full": "npm run build:frontend && npm run build:server",
     "start": "node start-server.cjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"

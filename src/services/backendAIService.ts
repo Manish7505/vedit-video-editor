@@ -26,8 +26,14 @@ class BackendAIService {
     this.baseUrl = import.meta.env.VITE_API_URL || '/api'
   }
 
-  // Check if AI service is available
-  async isAvailable(): Promise<boolean> {
+  // Check if AI service is available (synchronous - always returns true for backend service)
+  isAvailable(): boolean {
+    // Backend service is always "available" if the backend is running
+    return true
+  }
+
+  // Check if AI service is available (asynchronous - checks actual connection)
+  async isAvailableAsync(): Promise<boolean> {
     try {
       const response = await fetch(`${this.baseUrl}/ai/status`)
       const data = await response.json()

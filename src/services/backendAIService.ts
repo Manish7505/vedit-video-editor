@@ -36,6 +36,8 @@ class BackendAIService {
   constructor() {
     this.baseUrl = API_URL;
     console.log('BackendAIService initialized with URL:', this.baseUrl);
+    console.log('Environment VITE_API_URL:', import.meta.env.VITE_API_URL);
+    console.log('Fallback API_URL:', API_URL);
   }
 
   // Check if AI service is available (synchronous)
@@ -203,3 +205,9 @@ class BackendAIService {
 }
 
 export const backendAIService = new BackendAIService();
+
+// Make debug function available globally for browser console testing
+if (typeof window !== 'undefined') {
+  (window as any).debugAI = () => backendAIService.debugConnection();
+  (window as any).testAI = () => backendAIService.testConnection();
+}

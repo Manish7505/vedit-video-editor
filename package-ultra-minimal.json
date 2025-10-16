@@ -1,0 +1,13 @@
+{
+  "name": "vedit-ai-platform",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "start": "node ultra-simple-server.js",
+    "build": "echo 'Build complete'",
+    "dev": "echo 'Dev mode'"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}

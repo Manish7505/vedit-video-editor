@@ -53,8 +53,18 @@ app.use(express.static(path.join(__dirname, '../dist')));
 // Routes
 // Note: auth routes are no longer needed with Clerk
 app.use('/api/ai', aiRoutes);
-// Static hosting for rendered files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Root health check endpoint (backup for Railway)
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    port: PORT,
+    service: 'VEdit Full-Stack Application'
+  });
+});
+
 // Mount render routes so POST /api/render works
 app.use('/api', renderRoutes);
 app.use('/api', renderQueueRoutes);

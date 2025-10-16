@@ -24,7 +24,7 @@ const HomePage = () => {
   const { isSignedIn, user } = useUser()
 
   // Function to trigger AI assistant
-  const openAIAssistant = () => {
+  const openRouterAssistant = () => {
     // First, scroll down to make sure the assistant is visible
     window.scrollTo({ top: window.innerHeight * 0.9, behavior: 'smooth' })
     
@@ -129,7 +129,7 @@ const HomePage = () => {
               <a href="#features" className="text-white/80 hover:text-white transition-colors text-sm">Features</a>
               <a href="#pricing" className="text-white/80 hover:text-white transition-colors text-sm">Pricing</a>
               <button 
-                onClick={openAIAssistant}
+                onClick={openRouterAssistant}
                 className="text-white/80 hover:text-white transition-colors text-sm cursor-pointer"
               >
                 Help

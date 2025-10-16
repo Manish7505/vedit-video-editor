@@ -4,10 +4,10 @@ const OpenAI = require('openai');
 
 const router = express.Router();
 
-// Initialize OpenRouter (OpenAI-compatible API)
-let openai = null;
+// Initialize OpenRouter API client
+let openrouter = null;
 if (process.env.OPENROUTER_API_KEY) {
-  openai = new OpenAI({
+  openrouter = new OpenAI({
     apiKey: process.env.OPENROUTER_API_KEY,
     baseURL: "https://openrouter.ai/api/v1",
   });
@@ -42,7 +42,7 @@ router.post('/chat', chatValidation, async (req, res) => {
 
     const { message, context = '' } = req.body;
 
-    if (!openai) {
+    if (!openrouter) {
       return res.status(503).json({
         success: false,
         message: 'AI service is not available. Please configure OpenRouter API key.',
@@ -64,7 +64,7 @@ You can help with:
 
 Keep responses concise, helpful, and focused on video editing. If the user asks about non-video editing topics, politely redirect them back to video editing.`;
 
-      const completion = await openai.chat.completions.create({
+      const completion = await openrouter.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [
           { role: 'system', content: systemPrompt },
@@ -84,10 +84,10 @@ Keep responses concise, helpful, and focused on video editing. If the user asks 
         }
       });
 
-    } catch (openaiError) {
-      console.error('OpenAI API error:', openaiError);
+    } catch (openrouterError) {
+      console.error('OpenRouter API error:', openrouterError);
       
-      if (openaiError.status === 401) {
+      if (openrouterError.status === 401) {
         return res.status(401).json({
           success: false,
           message: 'Invalid OpenRouter API key',
@@ -95,15 +95,15 @@ Keep responses concise, helpful, and focused on video editing. If the user asks 
         });
       }
 
-      if (openaiError.status === 429) {
+      if (openrouterError.status === 429) {
         return res.status(429).json({
           success: false,
-          message: 'OpenAI API rate limit exceeded',
+          message: 'OpenRouter API rate limit exceeded',
           code: 'RATE_LIMIT_EXCEEDED'
         });
       }
 
-      throw openaiError;
+      throw openrouterError;
     }
 
   } catch (error) {
@@ -246,9 +246,9 @@ router.post('/execute-command', async (req, res) => {
       };
     } else {
       // Try to get AI response for unrecognized commands
-      if (openai) {
+      if (openrouter) {
         try {
-          const completion = await openai.chat.completions.create({
+          const completion = await openrouter.chat.completions.create({
             model: 'gpt-3.5-turbo',
             messages: [
               {
@@ -300,7 +300,7 @@ router.post('/execute-command', async (req, res) => {
 router.get('/status', async (req, res) => {
   try {
     const status = {
-      available: !!openai,
+      available: !!openrouter,
       service: 'OpenRouter',
       model: 'gpt-3.5-turbo',
       features: [
@@ -311,10 +311,10 @@ router.get('/status', async (req, res) => {
       ]
     };
 
-    if (openai) {
+    if (openrouter) {
       try {
         // Test API connection
-        await openai.models.list();
+        await openrouter.models.list();
         status.connected = true;
         status.message = 'AI service is ready';
       } catch (error) {
@@ -349,7 +349,7 @@ router.post('/suggestions', async (req, res) => {
   try {
     const { projectData, type = 'general' } = req.body;
 
-    if (!openai) {
+    if (!openrouter) {
       return res.status(503).json({
         success: false,
         message: 'AI service is not available',
@@ -377,7 +377,7 @@ router.post('/suggestions', async (req, res) => {
     }
 
     try {
-      const completion = await openai.chat.completions.create({
+      const completion = await openrouter.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [
           {
@@ -408,9 +408,9 @@ router.post('/suggestions', async (req, res) => {
         }
       });
 
-    } catch (openaiError) {
-      console.error('OpenAI suggestions error:', openaiError);
-      throw openaiError;
+    } catch (openrouterError) {
+      console.error('OpenRouter suggestions error:', openrouterError);
+      throw openrouterError;
     }
 
   } catch (error) {

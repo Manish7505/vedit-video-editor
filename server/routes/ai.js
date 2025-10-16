@@ -16,10 +16,15 @@ if (process.env.OPENROUTER_API_KEY) {
 // Available OpenRouter models (free and paid)
 const AVAILABLE_MODELS = {
   // Free models (high quality)
+  'meta-llama/llama-3.3-70b-instruct': 'Llama 3.3 70B (Free) - Best overall performance, multilingual',
+  'qwen/qwen-2.5-72b-instruct': 'Qwen 2.5 72B (Free) - Large context, 29+ languages',
+  'qwen/qwen-2.5-coder-32b-instruct': 'Qwen Coder 32B (Free) - Great for coding tasks',
   'deepseek/deepseek-chat': 'DeepSeek Chat (Free) - Excellent for text understanding',
-  'qwen/qwen-2.5-coder-7b-instruct': 'Qwen Coder (Free) - Great for coding tasks',
   'moonshot/moonshot-v1-8k': 'Moonshot (Free) - General purpose',
-  'meta-llama/llama-3.1-8b-instruct': 'Llama 3.1 (Free) - Meta\'s model',
+  'meta-llama/llama-3.2-3b-instruct': 'Llama 3.2 3B (Free) - Fast and efficient',
+  'mistral/mistral-nemo-12b-instruct': 'Mistral Nemo 12B (Free) - Balanced performance',
+  'google/gemma-2-9b-instruct': 'Gemma 2 9B (Free) - Google\'s model',
+  'mistral/mistral-7b-instruct': 'Mistral 7B (Free) - Industry standard',
   
   // Paid models (premium)
   'openai/gpt-4o-mini': 'GPT-4o Mini (Paid) - Fast and efficient',
@@ -28,7 +33,7 @@ const AVAILABLE_MODELS = {
 };
 
 // Default model (can be changed via environment variable)
-const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat';
+const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct';
 
 // Validation rules
 const chatValidation = [

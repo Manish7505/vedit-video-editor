@@ -143,7 +143,7 @@ Keep responses concise, helpful, and focused on video editing. If the user asks 
 // @access  Private
 router.post('/execute-command', async (req, res) => {
   try {
-    const { command, projectData } = req.body;
+    const { command, videoContext } = req.body;
 
     if (!command) {
       return res.status(400).json({
@@ -153,152 +153,75 @@ router.post('/execute-command', async (req, res) => {
       });
     }
 
-    // Parse the command and execute appropriate action
-    const lowerCommand = command.toLowerCase();
-    let result = { success: false, message: 'Command not recognized' };
+    if (!openrouter) {
+      return res.status(503).json({
+        success: false,
+        message: 'AI service not available',
+        code: 'AI_UNAVAILABLE'
+      });
+    }
 
-    // Basic command parsing
-    if (lowerCommand.includes('play') || lowerCommand.includes('start')) {
-      result = {
-        success: true,
-        message: 'Playing video...',
-        action: 'play',
-        data: { isPlaying: true }
-      };
-    } else if (lowerCommand.includes('pause') || lowerCommand.includes('stop')) {
-      result = {
-        success: true,
-        message: 'Paused video...',
-        action: 'pause',
-        data: { isPlaying: false }
-      };
-    } else if (lowerCommand.includes('jump to') || lowerCommand.includes('go to')) {
-      const timeMatch = lowerCommand.match(/(\d+):(\d+)/);
-      if (timeMatch) {
-        const minutes = parseInt(timeMatch[1]);
-        const seconds = parseInt(timeMatch[2]);
-        const newTime = minutes * 60 + seconds;
-        result = {
-          success: true,
-          message: `Jumped to ${timeMatch[0]}`,
-          action: 'seek',
-          data: { currentTime: newTime }
-        };
-      } else {
-        result = {
-          success: false,
-          message: 'Please specify time in MM:SS format (e.g., "jump to 1:30")'
-        };
-      }
-    } else if (lowerCommand.includes('add clip') || lowerCommand.includes('insert clip')) {
-      result = {
-        success: true,
-        message: 'Added new clip to timeline',
-        action: 'addClip',
-        data: {
-          clip: {
-            id: `clip-${Date.now()}`,
-            name: 'AI Generated Clip',
-            type: 'video',
-            startTime: projectData?.currentTime || 0,
-            endTime: (projectData?.currentTime || 0) + 5,
-            duration: 5,
-            url: '/herovideo.mp4'
-          }
-        }
-      };
-    } else if (lowerCommand.includes('delete clip') || lowerCommand.includes('remove clip')) {
-      if (projectData?.selectedClipId) {
-        result = {
-          success: true,
-          message: 'Deleted selected clip',
-          action: 'deleteClip',
-          data: { clipId: projectData.selectedClipId }
-        };
-      } else {
-        result = {
-          success: false,
-          message: 'Please select a clip first'
-        };
-      }
-    } else if (lowerCommand.includes('split clip')) {
-      if (projectData?.selectedClipId) {
-        result = {
-          success: true,
-          message: 'Split clip at current position',
-          action: 'splitClip',
-          data: {
-            clipId: projectData.selectedClipId,
-            splitTime: projectData?.currentTime || 0
-          }
-        };
-      } else {
-        result = {
-          success: false,
-          message: 'Please select a clip and position the playhead where you want to split'
-        };
-      }
-    } else if (lowerCommand.includes('remove filler words')) {
-      result = {
-        success: true,
-        message: 'Analyzing audio for filler words... (Feature coming soon)',
-        action: 'removeFillerWords',
-        data: {}
-      };
-    } else if (lowerCommand.includes('auto cut') || lowerCommand.includes('remove silence')) {
-      result = {
-        success: true,
-        message: 'Auto-cutting silences... (Feature coming soon)',
-        action: 'autoCutSilence',
-        data: {}
-      };
-    } else if (lowerCommand.includes('generate captions') || lowerCommand.includes('add subtitles')) {
-      result = {
-        success: true,
-        message: 'Generating captions... (Feature coming soon)',
-        action: 'generateCaptions',
-        data: {}
-      };
-    } else if (lowerCommand.includes('make it more engaging') || lowerCommand.includes('improve pacing')) {
-      result = {
-        success: true,
-        message: 'Applying AI-driven pacing improvements... (Feature coming soon)',
-        action: 'improvePacing',
-        data: {}
-      };
-    } else {
-      // Try to get AI response for unrecognized commands
-      if (openrouter) {
-        try {
-          const completion = await openrouter.chat.completions.create({
-            model: DEFAULT_MODEL,
-            messages: [
-              {
-                role: 'system',
-                content: 'You are a video editing assistant. Help users with video editing commands and provide helpful suggestions.'
-              },
-              {
-                role: 'user',
-                content: `I said: "${command}". How can I achieve this in video editing?`
-              }
-            ],
-            temperature: 0.7,
-            max_tokens: 200,
-          });
+    // Use AI to analyze and execute the command
+    const systemPrompt = `You are an AI video editing assistant. Analyze the user's command and determine the appropriate action to take.
 
-          result = {
-            success: true,
-            message: completion.choices[0].message.content,
-            action: 'suggestion',
-            data: {}
-          };
-        } catch (aiError) {
-          result = {
-            success: false,
-            message: 'I don\'t understand that command. Try saying "play video", "add clip", or "jump to 1:30"'
-          };
-        }
+Available actions:
+- play: Control video playback (play/pause)
+- seek: Jump to specific time
+- addClip: Add new video/audio clip
+- deleteClip: Remove selected clip
+- splitClip: Split clip at current position
+- addFilter: Apply visual effects
+- addText: Add text overlay
+- adjustVolume: Change audio volume
+- trimClip: Trim clip duration
+
+Current video context:
+- Current time: ${videoContext?.currentTime || 0}s
+- Duration: ${videoContext?.duration || 0}s
+- Clips count: ${videoContext?.clipsCount || 0}
+- Selected clip: ${videoContext?.selectedClip || 'none'}
+- Playback state: ${videoContext?.playbackState || 'paused'}
+
+Respond with a JSON object containing:
+{
+  "action": "action_name",
+  "confidence": 0.0-1.0,
+  "message": "Description of what will happen",
+  "data": { /* action-specific data */ }
+}
+
+Be confident (0.8+) for clear commands, lower confidence for ambiguous requests.`;
+
+    const completion = await openrouter.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: command }
+      ],
+      temperature: 0.3,
+      max_tokens: 500
+    });
+
+    const aiResponse = completion.choices[0]?.message?.content;
+    let result;
+
+    try {
+      result = JSON.parse(aiResponse);
+      // Ensure confidence is set
+      if (typeof result.confidence !== 'number') {
+        result.confidence = 0.8;
       }
+    } catch (parseError) {
+      console.error('AI response parsing failed:', parseError);
+      console.error('AI response:', aiResponse);
+      
+      // Fallback to basic command parsing if AI response is not valid JSON
+      const lowerCommand = command.toLowerCase();
+      result = { 
+        action: 'unknown', 
+        confidence: 0.1, 
+        message: 'Command not recognized. Try: "play video", "add clip", or "jump to 1:30"' 
+      };
     }
 
     res.json({

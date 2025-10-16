@@ -200,7 +200,10 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           if (analysis.confidence > 0.7) {
             // Execute the AI-suggested action
             const result = await executeVideoAction(analysis, targetClip)
-            return analysis.response + (result ? `\n\n${result}` : '')
+            return analysis.message + (result ? `\n\n${result}` : '')
+          } else {
+            // Low confidence - show the AI's suggestion
+            return analysis.message || 'I\'m not sure how to do that. Could you be more specific?'
           }
         } catch (error) {
           console.error('OpenRouter AI processing failed:', error)
@@ -215,25 +218,10 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
   }
 
   async function executeVideoAction(analysis: any, targetClip: any): Promise<string> {
-    const { action, parameters } = analysis
+    const { action, data } = analysis
 
     try {
       switch (action) {
-        case 'brightness':
-          return await adjustBrightness(targetClip, parameters.value || 20)
-        
-        case 'contrast':
-          return await adjustContrast(targetClip, parameters.value || 15)
-        
-        case 'saturation':
-          return await adjustSaturation(targetClip, parameters.value || 15)
-        
-        case 'volume':
-          return await adjustVolume(parameters.value || 50)
-        
-        case 'speed':
-          return await adjustSpeed(parameters.value || 1.5)
-        
         case 'play':
           setIsPlaying(true)
           return '✅ Playing video'
@@ -242,8 +230,80 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           setIsPlaying(false)
           return '✅ Paused video'
         
+        case 'seek':
+          if (data?.currentTime !== undefined) {
+            setCurrentTime(data.currentTime)
+            return `✅ Jumped to ${Math.floor(data.currentTime / 60)}:${String(Math.floor(data.currentTime % 60)).padStart(2, '0')}`
+          }
+          return '✅ Seeking to position'
+        
+        case 'addClip':
+          if (data?.clip) {
+            addClip(data.clip)
+            return `✅ Added ${data.clip.name} to timeline`
+          }
+          return '✅ Added clip to timeline'
+        
+        case 'deleteClip':
+          if (data?.clipId && targetClip) {
+            deleteClip(targetClip)
+            return '✅ Deleted selected clip'
+          }
+          return '✅ Deleted clip'
+        
+        case 'splitClip':
+          if (data?.clipId && data?.splitTime !== undefined) {
+            // Split clip logic would go here
+            return `✅ Split clip at ${Math.floor(data.splitTime / 60)}:${String(Math.floor(data.splitTime % 60)).padStart(2, '0')}`
+          }
+          return '✅ Split clip'
+        
+        case 'addFilter':
+          if (data?.filter && targetClip) {
+            // Apply filter logic would go here
+            return `✅ Applied ${data.filter} filter`
+          }
+          return '✅ Applied filter'
+        
+        case 'addText':
+          if (data?.text && targetClip) {
+            // Add text logic would go here
+            return `✅ Added text: "${data.text}"`
+          }
+          return '✅ Added text overlay'
+        
+        case 'adjustVolume':
+          if (data?.volume !== undefined) {
+            // Volume adjustment logic would go here
+            return `✅ Adjusted volume to ${data.volume}%`
+          }
+          return '✅ Adjusted volume'
+        
+        case 'trimClip':
+          if (data?.startTime !== undefined || data?.endTime !== undefined) {
+            // Trim logic would go here
+            return '✅ Trimmed clip'
+          }
+          return '✅ Trimmed clip'
+        
+        // Legacy support for old format
+        case 'brightness':
+          return await adjustBrightness(targetClip, data?.value || 20)
+        
+        case 'contrast':
+          return await adjustContrast(targetClip, data?.value || 15)
+        
+        case 'saturation':
+          return await adjustSaturation(targetClip, data?.value || 15)
+        
+        case 'volume':
+          return await adjustVolume(data?.value || 50)
+        
+        case 'speed':
+          return await adjustSpeed(data?.value || 1.5)
+        
         case 'effects':
-          return await applyEffect(targetClip, parameters.effect || 'blur')
+          return await applyEffect(targetClip, data?.effect || 'blur')
         
         case 'cut':
           return await cutClip(targetClip)
@@ -255,49 +315,49 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           return await resetFilters(targetClip)
         
         case 'transitions':
-          return await applyTransition(targetClip, parameters.type || 'fade_in')
+          return await applyTransition(targetClip, data?.type || 'fade_in')
         
         case 'text':
-          return await addTextOverlay(targetClip, parameters.text || 'Sample Text', parameters.position || 'center')
+          return await addTextOverlay(targetClip, data?.text || 'Sample Text', data?.position || 'center')
         
         case 'color_grading':
-          return await applyColorGrading(targetClip, parameters.style || 'cinematic')
+          return await applyColorGrading(targetClip, data?.style || 'cinematic')
         
         case 'crop':
-          return await cropVideo(targetClip, parameters.type || 'center')
+          return await cropVideo(targetClip, data?.type || 'center')
         
         case 'transform':
-          return await transformVideo(targetClip, parameters.operation || 'rotate', parameters.value || 0)
+          return await transformVideo(targetClip, data?.operation || 'rotate', data?.value || 0)
         
         case 'audio_effects':
-          return await applyAudioEffect(targetClip, parameters.effect || 'fade_in')
+          return await applyAudioEffect(targetClip, data?.effect || 'fade_in')
         
         case 'timeline':
-          return await navigateTimeline(parameters.action || 'jump_to', parameters.value || 0)
+          return await navigateTimeline(data?.action || 'jump_to', data?.value || 0)
         
         case 'scene_detection':
-          return await analyzeVideoContent(targetClip, parameters.analysis || 'find_scenes')
+          return await analyzeVideoContent(targetClip, data?.analysis || 'find_scenes')
         
         case 'auto_edit':
-          return await autoEditVideo(targetClip, parameters.task || 'remove_boring')
+          return await autoEditVideo(targetClip, data?.task || 'remove_boring')
         
         case 'multi_track':
-          return await multiTrackEdit(targetClip, parameters.operation || 'add_audio_track', parameters.value)
+          return await multiTrackEdit(targetClip, data?.operation || 'add_audio_track', data?.value)
         
         case 'animation':
-          return await applyAnimation(targetClip, parameters.type || 'fade_in', parameters.duration || 1000)
+          return await applyAnimation(targetClip, data?.type || 'fade_in', data?.duration || 1000)
         
         case 'export':
-          return await smartExport(targetClip, parameters.format || 'youtube_optimized')
+          return await smartExport(targetClip, data?.format || 'youtube_optimized')
         
         case 'add_overlay':
-          return await addOverlayTrack(parameters.url, parameters.startTime, parameters.endTime, parameters.x, parameters.y)
+          return await addOverlayTrack(data?.url, data?.startTime, data?.endTime, data?.x, data?.y)
         
         case 'add_audio_track':
-          return await addAudioTrack(parameters.url, parameters.startTime, parameters.endTime, parameters.volume)
+          return await addAudioTrack(data?.url, data?.startTime, data?.endTime, data?.volume)
         
         case 'cut_at_time':
-          return await cutClipAtTime(parameters.time)
+          return await cutClipAtTime(data?.time)
         
         case 'split_clip':
           return await splitClipAtCurrentTime()

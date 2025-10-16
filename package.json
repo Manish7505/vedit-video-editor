@@ -11,7 +11,7 @@
     "build:frontend": "npx vite build",
     "build:server": "cd server && npm install",
     "build:full": "npm run build:server && npm run build",
-    "start": "cd server && npm start",
+    "start": "node simple-server.js",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },

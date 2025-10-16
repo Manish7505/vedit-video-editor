@@ -1,148 +1,160 @@
-// Backend AI Service - Uses the backend OpenRouter API
-// This service handles communication with the backend AI endpoints
+// Backend AI Service - Handles communication with the backend OpenRouter API
+import axios from 'axios';
 
-interface AIResponse {
-  success: boolean
-  data?: any
-  message?: string
-  error?: string
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+
+interface BackendAIMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+interface BackendAIResponse {
+  message: string;
+  timestamp: string;
+  action?: string;
+  confidence?: number;
+  data?: any;
 }
 
 interface VideoContext {
-  currentTime: number
-  duration: number
-  clipsCount: number
-  selectedClip: string | null
-  clips: any[]
-  tracks: any[]
-  playbackState: 'playing' | 'paused'
-  currentEffects: any
+  currentTime: number;
+  duration: number;
+  clipsCount: number;
+  selectedClip: string | null;
+  clips: any[];
+  tracks: any[];
+  playbackState: 'playing' | 'paused';
+  currentEffects: any;
 }
 
 class BackendAIService {
-  private baseUrl: string
+  private baseUrl: string;
+  private isConnected: boolean = false;
+  private lastConnectionCheck: number = 0;
+  private connectionCheckInterval: number = 30000; // 30 seconds
 
   constructor() {
-    this.baseUrl = import.meta.env.VITE_API_URL || '/api'
+    this.baseUrl = API_URL;
+    console.log('BackendAIService initialized with URL:', this.baseUrl);
   }
 
-  // Check if AI service is available (synchronous - always returns true for backend service)
+  // Check if AI service is available (synchronous)
   isAvailable(): boolean {
-    // Backend service is always "available" if the backend is running
-    return true
+    return true; // Always available if backend is running
   }
 
-  // Check if AI service is available (asynchronous - checks actual connection)
+  // Check if AI service is available (asynchronous)
   async isAvailableAsync(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/ai/status`)
-      const data = await response.json()
-      return data.success && data.data?.available
+      const now = Date.now();
+      // Only check every 30 seconds to avoid too many requests
+      if (now - this.lastConnectionCheck < this.connectionCheckInterval) {
+        return this.isConnected;
+      }
+
+      const response = await fetch(`${this.baseUrl}/ai/status`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      });
+      
+      const data = await response.json();
+      this.isConnected = response.ok && data.success && data.data?.available;
+      this.lastConnectionCheck = now;
+      
+      console.log('AI connection check:', this.isConnected ? 'CONNECTED' : 'DISCONNECTED');
+      return this.isConnected;
     } catch (error) {
-      console.error('AI service availability check failed:', error)
-      return false
+      console.error('AI service availability check failed:', error);
+      this.isConnected = false;
+      this.lastConnectionCheck = Date.now();
+      return false;
     }
   }
 
-  // Test connection to AI service
   async testConnection(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/ai/status`)
-      const data = await response.json()
-      return data.success && data.data?.connected
-    } catch (error) {
-      console.error('AI connection test failed:', error)
-      return false
-    }
-  }
-
-  // Send chat message to AI
-  async sendChatMessage(message: string): Promise<string> {
-    try {
-      const response = await fetch(`${this.baseUrl}/ai/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message }),
-      })
-
-      const data: AIResponse = await response.json()
+      console.log('Testing AI connection to:', `${this.baseUrl}/ai/status`);
+      const response = await axios.get(`${this.baseUrl}/ai/status`, {
+        timeout: 5000
+      });
       
-      if (!data.success) {
-        throw new Error(data.message || 'AI chat failed')
-      }
-
-      return data.data?.response || 'No response from AI'
+      const isConnected = response.status === 200 && response.data.success;
+      console.log('AI connection test result:', isConnected ? 'SUCCESS' : 'FAILED');
+      return isConnected;
     } catch (error) {
-      console.error('AI chat error:', error)
-      throw new Error(`AI chat failed: ${error}`)
+      console.error('Backend AI service connection test failed:', error);
+      return false;
     }
   }
 
-  // Analyze video command
-  async analyzeVideoCommand(command: string, videoContext: VideoContext): Promise<string> {
+  async chat(message: string): Promise<BackendAIResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}/ai/execute-command`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          command,
-          context: videoContext 
-        }),
-      })
-
-      const data: AIResponse = await response.json()
+      console.log('Sending chat message to backend:', message);
+      const response = await axios.post(`${this.baseUrl}/ai/chat`, { 
+        message 
+      }, {
+        timeout: 30000
+      });
       
-      if (!data.success) {
-        throw new Error(data.message || 'AI command execution failed')
-      }
-
-      return data.data?.response || 'Command executed successfully'
-    } catch (error) {
-      console.error('AI command analysis error:', error)
-      throw new Error(`AI command analysis failed: ${error}`)
+      console.log('Chat response received:', response.data);
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Backend AI chat failed:', error);
+      throw new Error(error.response?.data?.message || 'Failed to get AI chat response');
     }
   }
 
-  // Get AI suggestions
-  async getSuggestions(context: string): Promise<string[]> {
+  async analyzeVideoCommand(command: string, videoContext: VideoContext): Promise<BackendAIResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}/ai/suggestions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ context }),
-      })
-
-      const data: AIResponse = await response.json()
+      console.log('Sending video command to backend:', command);
+      console.log('Video context:', videoContext);
       
-      if (!data.success) {
-        throw new Error(data.message || 'AI suggestions failed')
-      }
-
-      return data.data?.suggestions || []
-    } catch (error) {
-      console.error('AI suggestions error:', error)
-      throw new Error(`AI suggestions failed: ${error}`)
+      const response = await axios.post(`${this.baseUrl}/ai/execute-command`, { 
+        command, 
+        videoContext 
+      }, {
+        timeout: 30000
+      });
+      
+      console.log('Command analysis response:', response.data);
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Backend AI command execution failed:', error);
+      throw new Error(error.response?.data?.message || 'Failed to execute AI command');
     }
   }
 
-  // Get AI service status
-  async getStatus(): Promise<any> {
+  async getSuggestions(prompt: string, videoContext: VideoContext): Promise<BackendAIResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}/ai/status`)
-      const data = await response.json()
-      return data
-    } catch (error) {
-      console.error('AI status check failed:', error)
-      throw new Error(`AI status check failed: ${error}`)
+      console.log('Getting AI suggestions for:', prompt);
+      const response = await axios.post(`${this.baseUrl}/ai/suggestions`, { 
+        prompt, 
+        videoContext 
+      }, {
+        timeout: 30000
+      });
+      
+      console.log('Suggestions response:', response.data);
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Backend AI suggestions failed:', error);
+      throw new Error(error.response?.data?.message || 'Failed to get AI suggestions');
     }
+  }
+
+  // Get connection status
+  getConnectionStatus(): boolean {
+    return this.isConnected;
+  }
+
+  // Force connection check
+  async forceConnectionCheck(): Promise<boolean> {
+    this.lastConnectionCheck = 0; // Reset to force immediate check
+    return await this.isAvailableAsync();
   }
 }
 
-export const backendAIService = new BackendAIService()
-export default backendAIService
+export const backendAIService = new BackendAIService();

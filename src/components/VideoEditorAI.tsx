@@ -50,6 +50,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
     }
   })
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking')
+  const [isConnecting, setIsConnecting] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<any>(null)
   
@@ -117,23 +118,58 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
     }
   }, [clips, selectedClipId, currentTime, setSelectedClipId])
 
-  // Auto-reconnect logic when AI is re-enabled, and clear status when disabled
+  // AI connection management
   useEffect(() => {
-    try { localStorage.setItem('vedit-ai-enabled', String(aiEnabled)) } catch {}
-    const run = async () => {
+    try { 
+      localStorage.setItem('vedit-ai-enabled', String(aiEnabled)) 
+    } catch {}
+    
+    const checkConnection = async () => {
       if (!aiEnabled) {
         setConnectionStatus('disconnected')
         return
       }
+
+      setIsConnecting(true)
       setConnectionStatus('checking')
+      
       try {
-        const ok = backendAIService.isAvailable() && await backendAIService.testConnection()
-        setConnectionStatus(ok ? 'connected' : 'disconnected')
-      } catch (e) {
+        console.log('Checking AI connection...')
+        const isConnected = await backendAIService.testConnection()
+        console.log('AI connection result:', isConnected)
+        setConnectionStatus(isConnected ? 'connected' : 'disconnected')
+        
+        if (isConnected) {
+          toast.success('AI Connected! Advanced features enabled.')
+        } else {
+          toast.error('AI connection failed. Using basic mode.')
+        }
+      } catch (error) {
+        console.error('AI connection error:', error)
         setConnectionStatus('disconnected')
+        toast.error('AI service unavailable. Using basic mode.')
+      } finally {
+        setIsConnecting(false)
       }
     }
-    run()
+
+    checkConnection()
+  }, [aiEnabled])
+
+  // Periodic connection check when AI is enabled
+  useEffect(() => {
+    if (!aiEnabled) return
+
+    const interval = setInterval(async () => {
+      try {
+        const isConnected = await backendAIService.isAvailableAsync()
+        setConnectionStatus(isConnected ? 'connected' : 'disconnected')
+      } catch (error) {
+        setConnectionStatus('disconnected')
+      }
+    }, 30000) // Check every 30 seconds
+
+    return () => clearInterval(interval)
   }, [aiEnabled])
 
   const toggleListening = () => {
@@ -176,58 +212,42 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
       currentEffects: (targetClip as any)?.filters || {}
     }
 
-    // Try AI-powered command processing first
+    // Command processing logic
     console.log('Processing command. AI Enabled:', aiEnabled, 'Connection Status:', connectionStatus)
-    if (aiEnabled) {
-      // Proactively (re)connect if needed
-      if (!backendAIService.isAvailable()) {
-        toast.error('AI service unavailable. Please check backend configuration.')
-      } else if (connectionStatus !== 'connected') {
-        setConnectionStatus('checking')
-        try {
-          const ok = await backendAIService.testConnection()
-          setConnectionStatus(ok ? 'connected' : 'disconnected')
-        } catch (e) {
-          setConnectionStatus('disconnected')
+    
+    if (aiEnabled && connectionStatus === 'connected') {
+      // AI Powered Mode - Use real AI
+      console.log('🤖 Using AI Powered Mode...')
+      try {
+        const analysis = await backendAIService.analyzeVideoCommand(command, videoContext)
+        
+        // Handle different response types
+        if (analysis.action === 'conversation') {
+          return analysis.message
+        } else if (analysis.action === 'multi_task') {
+          return analysis.message
+        } else if (analysis.confidence > 0.7) {
+          const result = await executeVideoAction(analysis, targetClip)
+          return analysis.message + (result ? `\n\n${result}` : '')
+        } else {
+          return analysis.message || 'I\'m not sure how to do that. Could you be more specific?'
         }
-      }
-
-      if (connectionStatus === 'connected') {
-        console.log('Using AI processing...')
-        try {
-          const analysis = await backendAIService.analyzeVideoCommand(command, videoContext)
-          
-          // Handle different response types
-          if (analysis.action === 'conversation') {
-            // Natural conversation response
-            return analysis.message
-          } else if (analysis.action === 'multi_task') {
-            // Multi-task guidance response
-            return analysis.message
-          } else if (analysis.confidence > 0.7) {
-            // Execute the AI-suggested action
-            const result = await executeVideoAction(analysis, targetClip)
-            return analysis.message + (result ? `\n\n${result}` : '')
-          } else {
-            // Low confidence - show the AI's suggestion
-            return analysis.message || 'I\'m not sure how to do that. Could you be more specific?'
-          }
-        } catch (error) {
-          console.error('OpenRouter AI processing failed:', error)
-          // Fall back to basic processing
-        }
-      } else {
-        // AI enabled but not connected - use basic mode with notification
-        console.log('AI enabled but not connected. Using basic command processing...')
-        const basicResult = await processBasicCommand(command, targetClip)
-        return `🤖 **Basic Mode** (AI not connected)\n\n${basicResult}\n\n💡 *Enable AI connection for advanced features*`
+      } catch (error) {
+        console.error('AI processing failed:', error)
+        toast.error('AI processing failed. Falling back to basic mode.')
+        // Fall back to basic processing
       }
     }
-
-    // AI disabled - use basic keyword matching
-    console.log('Using basic command processing (AI disabled)...')
+    
+    // Basic Mode - Use keyword matching
+    console.log('⚡ Using Basic Mode...')
     const basicResult = await processBasicCommand(command, targetClip)
-    return `⚡ **Basic Mode**\n\n${basicResult}\n\n💡 *Click the AI button to enable advanced AI features*`
+    
+    if (aiEnabled && connectionStatus !== 'connected') {
+      return `🤖 **Basic Mode** (AI not connected)\n\n${basicResult}\n\n💡 *Click the reconnect button to enable AI features*`
+    } else {
+      return `⚡ **Basic Mode**\n\n${basicResult}\n\n💡 *Click the AI button to enable advanced AI features*`
+    }
   }
 
   async function executeVideoAction(analysis: any, targetClip: any): Promise<string> {
@@ -2127,54 +2147,86 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => {
-                  console.log('AI Toggle clicked. Current state:', aiEnabled)
-                  setAiEnabled(!aiEnabled)
-                  console.log('AI Toggle new state:', !aiEnabled)
-                  toast.success(aiEnabled ? 'AI disabled - Using basic mode' : 'AI enabled - Using advanced AI features')
-                }}
-                className={`relative p-3 rounded-xl transition-all duration-200 ${
-                  aiEnabled 
-                    ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg shadow-green-500/25' 
-                    : 'bg-gray-600 hover:bg-gray-700'
-                }`}
-                title={aiEnabled ? 'Click to disable AI (use basic mode)' : 'Click to enable AI (use advanced features)'}
-              >
-                <Zap className={`w-5 h-5 ${aiEnabled ? 'text-white' : 'text-gray-400'}`} />
-                {aiEnabled && (
-                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse" />
-                )}
-              </button>
-              <div className="flex flex-col">
-                <span className={`text-sm font-bold ${
-                  aiEnabled ? 'text-green-400' : 'text-gray-400'
-                }`}>
-                  {aiEnabled ? 'AI POWERED' : 'BASIC MODE'}
-                </span>
-                <span className={`text-xs ${
-                  aiEnabled ? 'text-green-300' : 'text-gray-500'
-                }`}>
-                  {aiEnabled ? 'Advanced AI features' : 'Simple commands only'}
-                </span>
-              </div>
-            </div>
+          <div className="flex items-center gap-3">
+            {/* AI Toggle Button */}
             <button
               onClick={() => {
-                // Reconnect to OpenRouter
-                setConnectionStatus('checking')
-                backendAIService.testConnection().then(connected => {
-                  setConnectionStatus(connected ? 'connected' : 'disconnected')
-                })
+                console.log('AI Toggle clicked. Current state:', aiEnabled)
+                setAiEnabled(!aiEnabled)
+                console.log('AI Toggle new state:', !aiEnabled)
+                if (!aiEnabled) {
+                  toast.success('AI enabled! Connecting to advanced features...')
+                } else {
+                  toast.success('AI disabled. Using basic mode.')
+                }
               }}
-              className="p-2 rounded-lg bg-gray-600 hover:bg-gray-700 transition-colors"
-              title="Reconnect AI"
+              disabled={isConnecting}
+              className={`relative p-3 rounded-xl transition-all duration-200 ${
+                aiEnabled 
+                  ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg shadow-green-500/25' 
+                  : 'bg-gray-600 hover:bg-gray-700'
+              } ${isConnecting ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title={aiEnabled ? 'Click to disable AI (use basic mode)' : 'Click to enable AI (use advanced features)'}
             >
-              <Settings className="w-4 h-4 text-gray-400" />
+              <Zap className={`w-5 h-5 ${aiEnabled ? 'text-white' : 'text-gray-400'}`} />
+              {aiEnabled && connectionStatus === 'connected' && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse" />
+              )}
+              {isConnecting && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-pulse" />
+              )}
             </button>
+
+            {/* Mode Display */}
+            <div className="flex flex-col">
+              <span className={`text-sm font-bold ${
+                aiEnabled && connectionStatus === 'connected' ? 'text-green-400' : 
+                aiEnabled ? 'text-yellow-400' : 'text-gray-400'
+              }`}>
+                {!aiEnabled ? 'BASIC MODE' :
+                 connectionStatus === 'connected' ? 'AI POWERED' :
+                 connectionStatus === 'checking' ? 'CONNECTING...' : 'AI ENABLED'}
+              </span>
+              <span className={`text-xs ${
+                aiEnabled && connectionStatus === 'connected' ? 'text-green-300' : 
+                aiEnabled ? 'text-yellow-300' : 'text-gray-500'
+              }`}>
+                {!aiEnabled ? 'Simple commands only' :
+                 connectionStatus === 'connected' ? 'Advanced AI features' :
+                 connectionStatus === 'checking' ? 'Connecting to AI...' : 'AI not connected'}
+              </span>
+            </div>
+
+            {/* Reconnect Button */}
+            {aiEnabled && connectionStatus !== 'connected' && (
+              <button
+                onClick={async () => {
+                  setIsConnecting(true)
+                  setConnectionStatus('checking')
+                  try {
+                    const isConnected = await backendAIService.testConnection()
+                    setConnectionStatus(isConnected ? 'connected' : 'disconnected')
+                    if (isConnected) {
+                      toast.success('AI Connected!')
+                    } else {
+                      toast.error('AI connection failed.')
+                    }
+                  } catch (error) {
+                    setConnectionStatus('disconnected')
+                    toast.error('AI connection failed.')
+                  } finally {
+                    setIsConnecting(false)
+                  }
+                }}
+                disabled={isConnecting}
+                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
+                title="Reconnect to AI service"
+              >
+                {isConnecting ? 'Connecting...' : 'Reconnect'}
+              </button>
+            )}
           </div>
+        </div>
         </div>
       </div>
 
@@ -2264,9 +2316,12 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder={aiEnabled && connectionStatus === 'connected' ? 
-                "🤖 AI Powered: Try 'Add title \"Welcome\" and apply cinematic color grading'" : 
-                aiEnabled ? "⚡ Basic Mode: Try 'make video brighter' or 'play video'" : "⚡ Basic Mode: Try 'make video brighter' or 'play video'"}
+              placeholder={
+                !aiEnabled ? "⚡ Basic Mode: Try 'make video brighter' or 'play video'" :
+                connectionStatus === 'connected' ? "🤖 AI Powered: Try 'Add title \"Welcome\" and apply cinematic color grading'" :
+                connectionStatus === 'checking' ? "🔄 Connecting to AI..." :
+                "⚡ Basic Mode (AI not connected): Try 'make video brighter' or 'play video'"
+              }
               disabled={isProcessing}
               className="w-full px-4 py-2.5 bg-gray-700 text-white rounded-xl border border-gray-600 focus:border-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
             />
@@ -2285,3 +2340,4 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
 }
 
 export default VideoEditorAI
+

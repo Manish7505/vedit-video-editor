@@ -3,12 +3,8 @@
 // Start script for Railway deployment
 // This avoids the 'cd' command issue in containers
 
-import { spawn } from 'child_process';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const { spawn } = require('child_process');
+const path = require('path');
 
 console.log('🚀 Starting VEdit Backend Server...');
 console.log('📁 Working directory:', process.cwd());

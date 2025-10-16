@@ -21,8 +21,9 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Create a robust startup script
+# Create a robust startup script with error handling
 RUN echo '#!/bin/sh' > /app/start.sh && \
+    echo 'set -e' >> /app/start.sh && \
     echo 'echo "Starting VEdit Video Editor..."' >> /app/start.sh && \
     echo 'echo "Environment: $NODE_ENV"' >> /app/start.sh && \
     echo 'echo "Port: $PORT"' >> /app/start.sh && \
@@ -31,8 +32,13 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'ls -la /app' >> /app/start.sh && \
     echo 'echo "Files in /app/dist:"' >> /app/start.sh && \
     echo 'ls -la /app/dist || echo "dist directory not found"' >> /app/start.sh && \
+    echo 'echo "Checking if start-server.cjs exists:"' >> /app/start.sh && \
+    echo 'ls -la /app/start-server.cjs || echo "start-server.cjs not found"' >> /app/start.sh && \
+    echo 'echo "Checking if server directory exists:"' >> /app/start.sh && \
+    echo 'ls -la /app/server || echo "server directory not found"' >> /app/start.sh && \
     echo 'echo "Starting server..."' >> /app/start.sh && \
-    echo 'npm start' >> /app/start.sh && \
+    echo 'cd /app && node start-server.cjs 2>&1' >> /app/start.sh && \
+    echo 'echo "Server process ended"' >> /app/start.sh && \
     chmod +x /app/start.sh
 
 # Expose port

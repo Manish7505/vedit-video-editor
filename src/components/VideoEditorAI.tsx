@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { useVideoEditor } from '../contexts/VideoEditorContext'
 import { useVideoEditorStore } from '../stores/videoEditorStore'
-import { openRouterService } from '../services/openRouter'
+import { backendAIService } from '../services/backendAIService'
 import toast from 'react-hot-toast'
 
 interface Message {
@@ -90,9 +90,9 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
   // Check OpenRouter connection on mount
   useEffect(() => {
     const checkConnection = async () => {
-      if (openRouterService.isAvailable()) {
+      if (backendAIService.isAvailable()) {
         try {
-          const isConnected = await openRouterService.testConnection()
+          const isConnected = await backendAIService.testConnection()
           setConnectionStatus(isConnected ? 'connected' : 'disconnected')
         } catch (error) {
           console.error('OpenRouter connection test failed:', error)
@@ -127,7 +127,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
       }
       setConnectionStatus('checking')
       try {
-        const ok = openRouterService.isAvailable() && await openRouterService.testConnection()
+        const ok = backendAIService.isAvailable() && await backendAIService.testConnection()
         setConnectionStatus(ok ? 'connected' : 'disconnected')
       } catch (e) {
         setConnectionStatus('disconnected')
@@ -180,12 +180,12 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
     console.log('Processing command. AI Enabled:', aiEnabled, 'Connection Status:', connectionStatus)
     if (aiEnabled) {
       // Proactively (re)connect if needed
-      if (!openRouterService.isAvailable()) {
-        toast.error('AI key missing. Set VITE_OPENROUTER_API_KEY in your .env and reload.')
+      if (!backendAIService.isAvailable()) {
+        toast.error('AI service unavailable. Please check backend configuration.')
       } else if (connectionStatus !== 'connected') {
         setConnectionStatus('checking')
         try {
-          const ok = await openRouterService.testConnection()
+          const ok = await backendAIService.testConnection()
           setConnectionStatus(ok ? 'connected' : 'disconnected')
         } catch (e) {
           setConnectionStatus('disconnected')
@@ -195,7 +195,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
       if (connectionStatus === 'connected') {
         console.log('Using AI processing...')
         try {
-          const analysis = await openRouterService.analyzeVideoCommand(command, videoContext)
+          const analysis = await backendAIService.analyzeVideoCommand(command, videoContext)
           
           if (analysis.confidence > 0.7) {
             // Execute the AI-suggested action
@@ -2079,7 +2079,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
               onClick={() => {
                 // Reconnect to OpenRouter
                 setConnectionStatus('checking')
-                openRouterService.testConnection().then(connected => {
+                backendAIService.testConnection().then(connected => {
                   setConnectionStatus(connected ? 'connected' : 'disconnected')
                 })
               }}

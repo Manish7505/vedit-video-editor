@@ -7,6 +7,9 @@ const http = require('http');
 const socketIo = require('socket.io');
 require('dotenv').config();
 
+// Define PORT early to avoid reference errors
+const PORT = Number(process.env.PORT || 8080);
+
 // Import routes
 const aiRoutes = require('./routes/ai');
 const renderRoutes = require('./routes/render');
@@ -150,8 +153,6 @@ app.get('*', (req, res) => {
   // Serve React app for all other routes
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
-
-const PORT = Number(process.env.PORT || 8080);
 
 // Debug port information
 console.log('🔍 Port Configuration Debug:');

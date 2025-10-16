@@ -139,7 +139,7 @@ Keep responses concise, helpful, and focused on video editing. If the user asks 
 });
 
 // @route   POST /api/ai/execute-command
-// @desc    Execute AI video editing command
+// @desc    Intelligent AI assistant that handles both conversation and video editing commands
 // @access  Private
 router.post('/execute-command', async (req, res) => {
   try {
@@ -161,8 +161,79 @@ router.post('/execute-command', async (req, res) => {
       });
     }
 
-    // Use AI to analyze and execute the command
-    const systemPrompt = `You are an AI video editing assistant. Analyze the user's command and determine the appropriate action to take.
+    // First, determine if this is a conversation or a video editing command
+    const intentAnalysisPrompt = `Analyze the user's message and determine the intent. Respond with ONLY a JSON object:
+
+{
+  "intent": "conversation" | "video_command" | "multi_task",
+  "confidence": 0.0-1.0,
+  "reasoning": "brief explanation"
+}
+
+Examples:
+- "hi", "hello", "how are you" → {"intent": "conversation", "confidence": 0.9, "reasoning": "greeting"}
+- "play video", "pause", "jump to 1:30" → {"intent": "video_command", "confidence": 0.9, "reasoning": "single video action"}
+- "make my video engaging and add music" → {"intent": "multi_task", "confidence": 0.8, "reasoning": "multiple video tasks"}`;
+
+    const intentCompletion = await openrouter.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: 'system', content: intentAnalysisPrompt },
+        { role: 'user', content: command }
+      ],
+      temperature: 0.1,
+      max_tokens: 100
+    });
+
+    let intentResult;
+    try {
+      intentResult = JSON.parse(intentCompletion.choices[0]?.message?.content);
+    } catch (parseError) {
+      // Default to conversation if parsing fails
+      intentResult = { intent: 'conversation', confidence: 0.5, reasoning: 'parsing failed' };
+    }
+
+    console.log('Intent analysis:', intentResult);
+
+    // Route based on intent
+    if (intentResult.intent === 'conversation') {
+      // Handle as natural conversation
+      const conversationPrompt = `You are a friendly AI video editing assistant. Respond naturally and helpfully to the user's message. Be conversational, warm, and offer to help with video editing tasks.
+
+Current video context:
+- Current time: ${videoContext?.currentTime || 0}s
+- Duration: ${videoContext?.duration || 0}s
+- Clips count: ${videoContext?.clipsCount || 0}
+- Selected clip: ${videoContext?.selectedClip || 'none'}
+- Playback state: ${videoContext?.playbackState || 'paused'}
+
+Respond naturally and offer to help with video editing.`;
+
+      const conversationCompletion = await openrouter.chat.completions.create({
+        model: DEFAULT_MODEL,
+        messages: [
+          { role: 'system', content: conversationPrompt },
+          { role: 'user', content: command }
+        ],
+        temperature: 0.7,
+        max_tokens: 200
+      });
+
+      const conversationResponse = conversationCompletion.choices[0]?.message?.content;
+      
+      res.json({
+        success: true,
+        data: {
+          action: 'conversation',
+          confidence: 0.9,
+          message: conversationResponse,
+          data: { type: 'conversation' }
+        }
+      });
+
+    } else if (intentResult.intent === 'video_command') {
+      // Handle as single video editing command
+      const commandPrompt = `You are an AI video editing assistant. Analyze the user's command and determine the appropriate action to take.
 
 Available actions:
 - play: Control video playback (play/pause)
@@ -182,59 +253,86 @@ Current video context:
 - Selected clip: ${videoContext?.selectedClip || 'none'}
 - Playback state: ${videoContext?.playbackState || 'paused'}
 
-IMPORTANT: You must respond with ONLY a valid JSON object. No other text. Example:
-{"action": "play", "confidence": 0.9, "message": "Playing video", "data": {"isPlaying": true}}
+Respond with ONLY a JSON object:
+{"action": "action_name", "confidence": 0.0-1.0, "message": "Description", "data": {...}}
 
 For time commands like "jump to 1:30", calculate seconds: 1:30 = 90 seconds.
-For clip commands, provide appropriate data structure.
+Be confident (0.8+) for clear commands.`;
 
-Be confident (0.8+) for clear commands, lower confidence for ambiguous requests.`;
+      const commandCompletion = await openrouter.chat.completions.create({
+        model: DEFAULT_MODEL,
+        messages: [
+          { role: 'system', content: commandPrompt },
+          { role: 'user', content: command }
+        ],
+        temperature: 0.1,
+        max_tokens: 200
+      });
 
-    const completion = await openrouter.chat.completions.create({
-      model: DEFAULT_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: command }
-      ],
-      temperature: 0.1,
-      max_tokens: 200
-    });
+      const aiResponse = commandCompletion.choices[0]?.message?.content;
+      let result;
 
-    const aiResponse = completion.choices[0]?.message?.content;
-    console.log('AI Response:', aiResponse);
-    let result;
-
-    try {
-      result = JSON.parse(aiResponse);
-      console.log('Parsed AI result:', result);
-      // Ensure confidence is set
-      if (typeof result.confidence !== 'number') {
-        result.confidence = 0.8;
+      try {
+        result = JSON.parse(aiResponse);
+        if (typeof result.confidence !== 'number') {
+          result.confidence = 0.8;
+        }
+      } catch (parseError) {
+        console.error('Command parsing failed:', parseError);
+        result = { 
+          action: 'unknown', 
+          confidence: 0.1, 
+          message: 'I understand you want to do something with the video, but I need more specific instructions. Try: "play video", "add clip", or "jump to 1:30"' 
+        };
       }
-    } catch (parseError) {
-      console.error('AI response parsing failed:', parseError);
-      console.error('AI response:', aiResponse);
+
+      res.json({
+        success: true,
+        data: result
+      });
+
+    } else if (intentResult.intent === 'multi_task') {
+      // Handle as multi-task request
+      const multiTaskPrompt = `You are an AI video editing assistant. The user has requested multiple tasks. Break down their request and provide a comprehensive response.
+
+Current video context:
+- Current time: ${videoContext?.currentTime || 0}s
+- Duration: ${videoContext?.duration || 0}s
+- Clips count: ${videoContext?.clipsCount || 0}
+- Selected clip: ${videoContext?.selectedClip || 'none'}
+- Playback state: ${videoContext?.playbackState || 'paused'}
+
+Respond with a helpful explanation of how to accomplish their multi-task request. Be specific and actionable.`;
+
+      const multiTaskCompletion = await openrouter.chat.completions.create({
+        model: DEFAULT_MODEL,
+        messages: [
+          { role: 'system', content: multiTaskPrompt },
+          { role: 'user', content: command }
+        ],
+        temperature: 0.7,
+        max_tokens: 400
+      });
+
+      const multiTaskResponse = multiTaskCompletion.choices[0]?.message?.content;
       
-      // Fallback to basic command parsing if AI response is not valid JSON
-      const lowerCommand = command.toLowerCase();
-      result = { 
-        action: 'unknown', 
-        confidence: 0.1, 
-        message: 'Command not recognized. Try: "play video", "add clip", or "jump to 1:30"' 
-      };
+      res.json({
+        success: true,
+        data: {
+          action: 'multi_task',
+          confidence: 0.8,
+          message: multiTaskResponse,
+          data: { type: 'multi_task_guidance' }
+        }
+      });
     }
 
-    res.json({
-      success: true,
-      data: result
-    });
-
   } catch (error) {
-    console.error('Execute command error:', error);
+    console.error('AI processing error:', error);
     res.status(500).json({
       success: false,
-      message: 'Command execution failed',
-      code: 'COMMAND_ERROR'
+      message: 'AI processing failed',
+      code: 'AI_ERROR'
     });
   }
 });

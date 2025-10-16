@@ -197,7 +197,14 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
         try {
           const analysis = await backendAIService.analyzeVideoCommand(command, videoContext)
           
-          if (analysis.confidence > 0.7) {
+          // Handle different response types
+          if (analysis.action === 'conversation') {
+            // Natural conversation response
+            return analysis.message
+          } else if (analysis.action === 'multi_task') {
+            // Multi-task guidance response
+            return analysis.message
+          } else if (analysis.confidence > 0.7) {
             // Execute the AI-suggested action
             const result = await executeVideoAction(analysis, targetClip)
             return analysis.message + (result ? `\n\n${result}` : '')

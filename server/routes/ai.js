@@ -182,13 +182,11 @@ Current video context:
 - Selected clip: ${videoContext?.selectedClip || 'none'}
 - Playback state: ${videoContext?.playbackState || 'paused'}
 
-Respond with a JSON object containing:
-{
-  "action": "action_name",
-  "confidence": 0.0-1.0,
-  "message": "Description of what will happen",
-  "data": { /* action-specific data */ }
-}
+IMPORTANT: You must respond with ONLY a valid JSON object. No other text. Example:
+{"action": "play", "confidence": 0.9, "message": "Playing video", "data": {"isPlaying": true}}
+
+For time commands like "jump to 1:30", calculate seconds: 1:30 = 90 seconds.
+For clip commands, provide appropriate data structure.
 
 Be confident (0.8+) for clear commands, lower confidence for ambiguous requests.`;
 
@@ -198,15 +196,17 @@ Be confident (0.8+) for clear commands, lower confidence for ambiguous requests.
         { role: 'system', content: systemPrompt },
         { role: 'user', content: command }
       ],
-      temperature: 0.3,
-      max_tokens: 500
+      temperature: 0.1,
+      max_tokens: 200
     });
 
     const aiResponse = completion.choices[0]?.message?.content;
+    console.log('AI Response:', aiResponse);
     let result;
 
     try {
       result = JSON.parse(aiResponse);
+      console.log('Parsed AI result:', result);
       // Ensure confidence is set
       if (typeof result.confidence !== 'number') {
         result.confidence = 0.8;

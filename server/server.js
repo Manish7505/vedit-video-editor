@@ -8,9 +8,6 @@ const socketIo = require('socket.io');
 require('dotenv').config();
 
 // Import routes
-const userRoutes = require('./routes/users');
-const projectRoutes = require('./routes/projects');
-const fileRoutes = require('./routes/files');
 const aiRoutes = require('./routes/ai');
 const renderRoutes = require('./routes/render');
 const renderQueueRoutes = require('./routes/renderQueue');
@@ -19,8 +16,7 @@ const renderQueueRoutes = require('./routes/renderQueue');
 const { errorHandler } = require('./middleware/errorHandler');
 // Clerk authentication removed
 
-// Import database
-const connectDB = require('./config/database');
+// Database connection removed - using file-based storage
 
 const app = express();
 const server = http.createServer(app);
@@ -31,8 +27,7 @@ const io = socketIo(server, {
   }
 });
 
-// Connect to database
-connectDB();
+// Database connection removed - using file-based storage
 
 // Middleware
 app.use(helmet({
@@ -55,9 +50,6 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 // Note: auth routes are no longer needed with Clerk
-app.use('/api/users', userRoutes);
-app.use('/api/projects', projectRoutes);
-app.use('/api/files', fileRoutes);
 app.use('/api/ai', aiRoutes);
 // Static hosting for rendered files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

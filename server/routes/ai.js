@@ -4,11 +4,12 @@ const OpenAI = require('openai');
 
 const router = express.Router();
 
-// Initialize OpenAI
+// Initialize OpenRouter (OpenAI-compatible API)
 let openai = null;
-if (process.env.OPENAI_API_KEY) {
+if (process.env.OPENROUTER_API_KEY) {
   openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: "https://openrouter.ai/api/v1",
   });
 }
 
@@ -44,7 +45,7 @@ router.post('/chat', chatValidation, async (req, res) => {
     if (!openai) {
       return res.status(503).json({
         success: false,
-        message: 'AI service is not available. Please configure OpenAI API key.',
+        message: 'AI service is not available. Please configure OpenRouter API key.',
         code: 'AI_SERVICE_UNAVAILABLE'
       });
     }
@@ -89,7 +90,7 @@ Keep responses concise, helpful, and focused on video editing. If the user asks 
       if (openaiError.status === 401) {
         return res.status(401).json({
           success: false,
-          message: 'Invalid OpenAI API key',
+          message: 'Invalid OpenRouter API key',
           code: 'INVALID_API_KEY'
         });
       }
@@ -300,7 +301,7 @@ router.get('/status', async (req, res) => {
   try {
     const status = {
       available: !!openai,
-      service: 'OpenAI',
+      service: 'OpenRouter',
       model: 'gpt-3.5-turbo',
       features: [
         'Chat assistance',

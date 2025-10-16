@@ -22,7 +22,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: process.env.NODE_ENV === 'production' ? true : (process.env.FRONTEND_URL || "http://localhost:3000"),
     methods: ["GET", "POST"]
   }
 });
@@ -36,7 +36,7 @@ app.use(helmet({
 }));
 app.use(morgan('combined'));
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  origin: process.env.NODE_ENV === 'production' ? true : (process.env.FRONTEND_URL || "http://localhost:3000"),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']

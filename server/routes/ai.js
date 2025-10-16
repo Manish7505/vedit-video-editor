@@ -162,18 +162,19 @@ router.post('/execute-command', async (req, res) => {
     }
 
     // First, determine if this is a conversation or a video editing command
-    const intentAnalysisPrompt = `Analyze the user's message and determine the intent. Respond with ONLY a JSON object:
+    const intentAnalysisPrompt = `You are an intent classifier. Analyze the user's message and determine the intent. You MUST respond with ONLY a valid JSON object, no other text.
 
-{
-  "intent": "conversation" | "video_command" | "multi_task",
-  "confidence": 0.0-1.0,
-  "reasoning": "brief explanation"
-}
+Rules:
+- conversation: greetings, questions, casual chat
+- video_command: single video editing action (play, pause, seek, add clip, etc.)
+- multi_task: multiple video editing tasks in one request
 
 Examples:
-- "hi", "hello", "how are you" → {"intent": "conversation", "confidence": 0.9, "reasoning": "greeting"}
-- "play video", "pause", "jump to 1:30" → {"intent": "video_command", "confidence": 0.9, "reasoning": "single video action"}
-- "make my video engaging and add music" → {"intent": "multi_task", "confidence": 0.8, "reasoning": "multiple video tasks"}`;
+"hi" → {"intent": "conversation", "confidence": 0.9, "reasoning": "greeting"}
+"play video" → {"intent": "video_command", "confidence": 0.9, "reasoning": "single video action"}
+"make my video engaging and add music" → {"intent": "multi_task", "confidence": 0.8, "reasoning": "multiple video tasks"}
+
+Respond with ONLY the JSON object:`;
 
     const intentCompletion = await openrouter.chat.completions.create({
       model: DEFAULT_MODEL,
@@ -182,15 +183,32 @@ Examples:
         { role: 'user', content: command }
       ],
       temperature: 0.1,
-      max_tokens: 100
+      max_tokens: 150
     });
 
     let intentResult;
     try {
-      intentResult = JSON.parse(intentCompletion.choices[0]?.message?.content);
+      const responseText = intentCompletion.choices[0]?.message?.content?.trim();
+      console.log('Raw intent response:', responseText);
+      
+      // Try to extract JSON from the response
+      const jsonMatch = responseText.match(/\{.*\}/);
+      if (jsonMatch) {
+        intentResult = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('No JSON found in response');
+      }
     } catch (parseError) {
-      // Default to conversation if parsing fails
-      intentResult = { intent: 'conversation', confidence: 0.5, reasoning: 'parsing failed' };
+      console.error('Intent parsing failed:', parseError);
+      // Smart fallback based on command content
+      const lowerCommand = command.toLowerCase();
+      if (lowerCommand.includes('play') || lowerCommand.includes('pause') || lowerCommand.includes('seek') || lowerCommand.includes('jump')) {
+        intentResult = { intent: 'video_command', confidence: 0.8, reasoning: 'fallback - video action detected' };
+      } else if (lowerCommand.includes('and') || lowerCommand.includes('also') || lowerCommand.includes('then')) {
+        intentResult = { intent: 'multi_task', confidence: 0.7, reasoning: 'fallback - multiple tasks detected' };
+      } else {
+        intentResult = { intent: 'conversation', confidence: 0.6, reasoning: 'fallback - default to conversation' };
+      }
     }
 
     console.log('Intent analysis:', intentResult);
@@ -233,7 +251,7 @@ Respond naturally and offer to help with video editing.`;
 
     } else if (intentResult.intent === 'video_command') {
       // Handle as single video editing command
-      const commandPrompt = `You are an AI video editing assistant. Analyze the user's command and determine the appropriate action to take.
+      const commandPrompt = `You are an AI video editing assistant. Analyze the user's command and determine the appropriate action. You MUST respond with ONLY a valid JSON object.
 
 Available actions:
 - play: Control video playback (play/pause)
@@ -253,11 +271,13 @@ Current video context:
 - Selected clip: ${videoContext?.selectedClip || 'none'}
 - Playback state: ${videoContext?.playbackState || 'paused'}
 
-Respond with ONLY a JSON object:
-{"action": "action_name", "confidence": 0.0-1.0, "message": "Description", "data": {...}}
+Examples:
+"play video" → {"action": "play", "confidence": 0.9, "message": "Playing the video", "data": {}}
+"jump to 1:30" → {"action": "seek", "confidence": 0.9, "message": "Jumping to 1:30", "data": {"currentTime": 90}}
+"pause" → {"action": "play", "confidence": 0.9, "message": "Pausing the video", "data": {}}
 
-For time commands like "jump to 1:30", calculate seconds: 1:30 = 90 seconds.
-Be confident (0.8+) for clear commands.`;
+For time commands, calculate seconds: 1:30 = 90 seconds.
+Respond with ONLY the JSON object:`;
 
       const commandCompletion = await openrouter.chat.completions.create({
         model: DEFAULT_MODEL,
@@ -270,20 +290,38 @@ Be confident (0.8+) for clear commands.`;
       });
 
       const aiResponse = commandCompletion.choices[0]?.message?.content;
+      console.log('Raw command response:', aiResponse);
       let result;
 
       try {
-        result = JSON.parse(aiResponse);
+        // Try to extract JSON from the response
+        const jsonMatch = aiResponse.match(/\{.*\}/);
+        if (jsonMatch) {
+          result = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('No JSON found in response');
+        }
+        
         if (typeof result.confidence !== 'number') {
           result.confidence = 0.8;
         }
       } catch (parseError) {
         console.error('Command parsing failed:', parseError);
-        result = { 
-          action: 'unknown', 
-          confidence: 0.1, 
-          message: 'I understand you want to do something with the video, but I need more specific instructions. Try: "play video", "add clip", or "jump to 1:30"' 
-        };
+        // Smart fallback based on command content
+        const lowerCommand = command.toLowerCase();
+        if (lowerCommand.includes('play')) {
+          result = { action: 'play', confidence: 0.8, message: 'Playing the video', data: {} };
+        } else if (lowerCommand.includes('pause')) {
+          result = { action: 'play', confidence: 0.8, message: 'Pausing the video', data: {} };
+        } else if (lowerCommand.includes('jump') || lowerCommand.includes('seek')) {
+          result = { action: 'seek', confidence: 0.7, message: 'Seeking to position', data: {} };
+        } else {
+          result = { 
+            action: 'unknown', 
+            confidence: 0.1, 
+            message: 'I understand you want to do something with the video, but I need more specific instructions. Try: "play video", "add clip", or "jump to 1:30"' 
+          };
+        }
       }
 
       res.json({

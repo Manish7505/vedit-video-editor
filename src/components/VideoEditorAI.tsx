@@ -216,12 +216,18 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           console.error('OpenRouter AI processing failed:', error)
           // Fall back to basic processing
         }
+      } else {
+        // AI enabled but not connected - use basic mode with notification
+        console.log('AI enabled but not connected. Using basic command processing...')
+        const basicResult = await processBasicCommand(command, targetClip)
+        return `🤖 **Basic Mode** (AI not connected)\n\n${basicResult}\n\n💡 *Enable AI connection for advanced features*`
       }
     }
 
-    // Fallback to basic keyword matching
-    console.log('Using basic command processing...')
-    return processBasicCommand(command, targetClip)
+    // AI disabled - use basic keyword matching
+    console.log('Using basic command processing (AI disabled)...')
+    const basicResult = await processBasicCommand(command, targetClip)
+    return `⚡ **Basic Mode**\n\n${basicResult}\n\n💡 *Click the AI button to enable advanced AI features*`
   }
 
   async function executeVideoAction(analysis: any, targetClip: any): Promise<string> {
@@ -966,7 +972,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
 
     // Help command
     if (lowerCommand.includes('help') || lowerCommand.includes('commands') || lowerCommand.includes('what can you do')) {
-      return `🎬 **AI Video Editor Commands**\n\n**🎨 Visual Adjustments:**\n• "Make it brighter/darker" or "Increase/decrease brightness by 20"\n• "Add more contrast" or "Increase/decrease contrast by 15"\n• "Make it more colorful" or "Increase/decrease saturation by 15"\n• "Set brightness to 120"\n\n**🎭 Visual Effects:**\n• "Add blur effect" or "Apply blur"\n• "Make it vintage" or "Apply vintage effect"\n• "Convert to black and white" or "Make it grayscale"\n• "Add sepia tone" or "Apply sepia filter"\n• "Make it warm" or "Apply warm filter"\n• "Cool down the colors" or "Add cool effect"\n• "Add more filters" (applies multiple effects)\n\n**▶️ Playback Control:**\n• "Play the video" or "Start playback"\n• "Pause the video" or "Stop playback"\n• "Speed it up" or "Speed up to 2x"\n• "Slow it down" or "Slow down to 0.5x"\n\n**🔊 Audio Control:**\n• "Turn up the volume" or "Increase volume to 80"\n• "Turn down the volume" or "Decrease volume to 30"\n• "Mute the audio" or "Unmute the audio"\n\n**📝 Text & Overlays:**\n• "Add a title 'Welcome' at the top"\n• "Put subtitle 'Hello World' at the bottom"\n• "Add watermark 'Sample' at center"\n\n**🔄 Transitions:**\n• "Add fade transition" or "Apply fade effect"\n• "Slide from left" or "Apply slide transition"\n• "Zoom in effect" or "Add zoom transition"\n• "Crossfade between clips"\n\n**🔄 Transformations:**\n• "Rotate the video" or "Rotate 90 degrees"\n• "Flip it horizontally" or "Flip horizontally"\n• "Flip it vertically" or "Flip vertically"\n• "Zoom in" or "Scale up"\n• "Zoom out" or "Scale down"\n\n**⏰ Timeline Navigation:**\n• "Jump to 30 seconds" or "Go to 30s"\n• "Go to the beginning" or "Go to start"\n• "Go to the end" or "Seek to end"\n• "Find the best moment"\n\n**🛠️ Utility Commands:**\n• "Help me" or "What can you do?"\n• "Show status" or "Current state"\n• "Reset everything" or "Clear all filters"\n• "Remove all effects"\n\n**🎯 Natural Language Examples:**\n• "Make this video look more professional"\n• "Add some dramatic effects"\n• "Make it brighter and more colorful"\n• "Slow down and add a blur effect"\n• "Create a vintage look with warm colors"\n\nTry speaking naturally - I understand context and intent!`
+      return `🎬 **AI Video Editor Commands**\n\n**🎨 Visual Adjustments:**\n• "Make it brighter/darker" or "Increase/decrease brightness by 20"\n• "Add more contrast" or "Increase/decrease contrast by 15"\n• "Make it more colorful" or "Increase/decrease saturation by 15"\n• "Set brightness to 120"\n\n**🎭 Visual Effects:**\n• "Add blur effect" or "Apply blur"\n• "Make it vintage" or "Apply vintage effect"\n• "Convert to black and white" or "Make it grayscale"\n• "Add sepia tone" or "Apply sepia filter"\n• "Make it warm" or "Apply warm filter"\n• "Cool down the colors" or "Add cool effect"\n• "Add more filters" (applies multiple effects)\n\n**▶️ Playback Control:**\n• "Play the video" or "Start playback"\n• "Pause the video" or "Stop playback"\n• "Speed it up" or "Speed up to 2x"\n• "Slow it down" or "Slow down to 0.5x"\n\n**🔊 Audio Control:**\n• "Turn up the volume" or "Increase volume to 80"\n• "Turn down the volume" or "Decrease volume to 30"\n• "Mute the audio" or "Unmute the audio"\n\n**📝 Text & Overlays:**\n• "Add a title 'Welcome' at the top"\n• "Put subtitle 'Hello World' at the bottom"\n• "Add watermark 'Sample' at center"\n\n**🔄 Transitions:**\n• "Add fade transition" or "Apply fade effect"\n• "Slide from left" or "Apply slide transition"\n• "Zoom in effect" or "Add zoom transition"\n• "Crossfade between clips"\n\n**🔄 Transformations:**\n• "Rotate the video" or "Rotate 90 degrees"\n• "Flip it horizontally" or "Flip horizontally"\n• "Flip it vertically" or "Flip vertically"\n• "Zoom in" or "Scale up"\n• "Zoom out" or "Scale down"\n\n**⏰ Timeline Navigation:**\n• "Jump to 30 seconds" or "Go to 30s"\n• "Go to the beginning" or "Go to start"\n• "Go to the end" or "Seek to end"\n• "Find the best moment"\n\n**🛠️ Utility Commands:**\n• "Help me" or "What can you do?"\n• "Show status" or "Current state"\n• "Reset everything" or "Clear all filters"\n• "Remove all effects"\n\n**🎯 Natural Language Examples:**\n• "Make this video look more professional"\n• "Add some dramatic effects"\n• "Make it brighter and more colorful"\n• "Slow down and add a blur effect"\n• "Create a vintage look with warm colors"\n\n**🤖 AI Mode vs Basic Mode:**\n• **Basic Mode** (current): Simple keyword commands\n• **AI Powered**: Natural language like "make my video more engaging and add some music"\n• Click the AI button to toggle between modes\n\n**💡 Pro Tip:** Enable AI mode for advanced natural language processing!`
     }
 
     // Status command
@@ -2110,37 +2116,50 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${
                   !aiEnabled ? 'bg-gray-500' :
-                  connectionStatus === 'connected' ? 'bg-green-500' : 
-                  connectionStatus === 'checking' ? 'bg-yellow-500' : 'bg-orange-500'
+                  connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 
+                  connectionStatus === 'checking' ? 'bg-yellow-500 animate-pulse' : 'bg-orange-500'
                 }`} />
                 <p className="text-xs text-gray-400">
-                  {!aiEnabled ? 'AI Disabled' :
-                   connectionStatus === 'connected' ? 'AI Powered' : 
-                   connectionStatus === 'checking' ? 'Connecting...' : 'AI Enabled (Basic Mode)'}
+                  {!aiEnabled ? 'Basic Mode Active' :
+                   connectionStatus === 'connected' ? 'AI Powered & Connected' : 
+                   connectionStatus === 'checking' ? 'Connecting to AI...' : 'AI Enabled (Not Connected)'}
                 </p>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <button
                 onClick={() => {
                   console.log('AI Toggle clicked. Current state:', aiEnabled)
                   setAiEnabled(!aiEnabled)
                   console.log('AI Toggle new state:', !aiEnabled)
+                  toast.success(aiEnabled ? 'AI disabled - Using basic mode' : 'AI enabled - Using advanced AI features')
                 }}
-                className={`p-2 rounded-lg transition-colors ${
-                  aiEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 hover:bg-gray-700'
+                className={`relative p-3 rounded-xl transition-all duration-200 ${
+                  aiEnabled 
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg shadow-green-500/25' 
+                    : 'bg-gray-600 hover:bg-gray-700'
                 }`}
-                title={aiEnabled ? 'AI Enabled' : 'AI Disabled'}
+                title={aiEnabled ? 'Click to disable AI (use basic mode)' : 'Click to enable AI (use advanced features)'}
               >
-                <Zap className={`w-4 h-4 ${aiEnabled ? 'text-white' : 'text-gray-400'}`} />
+                <Zap className={`w-5 h-5 ${aiEnabled ? 'text-white' : 'text-gray-400'}`} />
+                {aiEnabled && (
+                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse" />
+                )}
               </button>
-              <span className={`text-xs font-medium ${
-                aiEnabled ? 'text-green-400' : 'text-gray-400'
-              }`}>
-                {aiEnabled ? 'AI ON' : 'AI OFF'}
-              </span>
+              <div className="flex flex-col">
+                <span className={`text-sm font-bold ${
+                  aiEnabled ? 'text-green-400' : 'text-gray-400'
+                }`}>
+                  {aiEnabled ? 'AI POWERED' : 'BASIC MODE'}
+                </span>
+                <span className={`text-xs ${
+                  aiEnabled ? 'text-green-300' : 'text-gray-500'
+                }`}>
+                  {aiEnabled ? 'Advanced AI features' : 'Simple commands only'}
+                </span>
+              </div>
             </div>
             <button
               onClick={() => {
@@ -2246,8 +2265,8 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder={aiEnabled && connectionStatus === 'connected' ? 
-                "Try: 'Add title \"Welcome\" and apply cinematic color grading'" : 
-                aiEnabled ? "AI enabled but not connected. Using basic commands..." : "AI disabled. Using basic commands..."}
+                "🤖 AI Powered: Try 'Add title \"Welcome\" and apply cinematic color grading'" : 
+                aiEnabled ? "⚡ Basic Mode: Try 'make video brighter' or 'play video'" : "⚡ Basic Mode: Try 'make video brighter' or 'play video'"}
               disabled={isProcessing}
               className="w-full px-4 py-2.5 bg-gray-700 text-white rounded-xl border border-gray-600 focus:border-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
             />

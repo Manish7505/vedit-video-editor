@@ -118,13 +118,13 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
     }
   }, [clips, selectedClipId, currentTime, setSelectedClipId])
 
-  // AI connection management
+  // AI connection management with retry logic
   useEffect(() => {
     try { 
       localStorage.setItem('vedit-ai-enabled', String(aiEnabled)) 
     } catch {}
     
-    const checkConnection = async () => {
+    const checkConnection = async (retryCount = 0) => {
       if (!aiEnabled) {
         setConnectionStatus('disconnected')
         return
@@ -134,20 +134,32 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
       setConnectionStatus('checking')
       
       try {
-        console.log('Checking AI connection...')
+        console.log(`🔄 AI connection check attempt ${retryCount + 1}`)
         const isConnected = await backendAIService.testConnection()
-        console.log('AI connection result:', isConnected)
+        console.log('✅ AI connection result:', isConnected)
         setConnectionStatus(isConnected ? 'connected' : 'disconnected')
         
         if (isConnected) {
-          toast.success('AI Connected! Advanced features enabled.')
+          toast.success('🤖 AI Connected! Advanced features enabled.')
+        } else if (retryCount < 2) {
+          // Retry up to 3 times
+          console.log(`🔄 Retrying connection in 2 seconds... (${retryCount + 1}/3)`)
+          setTimeout(() => checkConnection(retryCount + 1), 2000)
+          return
         } else {
-          toast.error('AI connection failed. Using basic mode.')
+          toast.error('❌ AI connection failed. Using basic mode.')
         }
       } catch (error) {
-        console.error('AI connection error:', error)
+        console.error('❌ AI connection error:', error)
         setConnectionStatus('disconnected')
-        toast.error('AI service unavailable. Using basic mode.')
+        
+        if (retryCount < 2) {
+          console.log(`🔄 Retrying connection in 2 seconds... (${retryCount + 1}/3)`)
+          setTimeout(() => checkConnection(retryCount + 1), 2000)
+          return
+        } else {
+          toast.error('❌ AI service unavailable. Using basic mode.')
+        }
       } finally {
         setIsConnecting(false)
       }
@@ -162,15 +174,28 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
 
     const interval = setInterval(async () => {
       try {
+        console.log('🔄 Periodic AI connection check...')
         const isConnected = await backendAIService.isAvailableAsync()
-        setConnectionStatus(isConnected ? 'connected' : 'disconnected')
+        const newStatus = isConnected ? 'connected' : 'disconnected'
+        
+        if (newStatus !== connectionStatus) {
+          console.log(`📊 Connection status changed: ${connectionStatus} → ${newStatus}`)
+          setConnectionStatus(newStatus)
+          
+          if (newStatus === 'connected') {
+            toast.success('🤖 AI reconnected!')
+          } else {
+            toast.error('❌ AI disconnected')
+          }
+        }
       } catch (error) {
+        console.error('❌ Periodic connection check failed:', error)
         setConnectionStatus('disconnected')
       }
-    }, 30000) // Check every 30 seconds
+    }, 15000) // Check every 15 seconds
 
     return () => clearInterval(interval)
-  }, [aiEnabled])
+  }, [aiEnabled, connectionStatus])
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
@@ -2201,26 +2226,31 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
             {aiEnabled && connectionStatus !== 'connected' && (
               <button
                 onClick={async () => {
+                  console.log('🔄 Manual reconnect triggered')
                   setIsConnecting(true)
                   setConnectionStatus('checking')
+                  
                   try {
-                    const isConnected = await backendAIService.testConnection()
+                    // Force a fresh connection check
+                    const isConnected = await backendAIService.forceConnectionCheck()
                     setConnectionStatus(isConnected ? 'connected' : 'disconnected')
+                    
                     if (isConnected) {
-                      toast.success('AI Connected!')
+                      toast.success('🤖 AI Connected! Advanced features enabled.')
                     } else {
-                      toast.error('AI connection failed.')
+                      toast.error('❌ AI connection failed. Check console for details.')
                     }
                   } catch (error) {
+                    console.error('❌ Manual reconnect failed:', error)
                     setConnectionStatus('disconnected')
-                    toast.error('AI connection failed.')
+                    toast.error('❌ AI connection failed. Check console for details.')
                   } finally {
                     setIsConnecting(false)
                   }
                 }}
                 disabled={isConnecting}
                 className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
-                title="Reconnect to AI service"
+                title="Force reconnect to AI service"
               >
                 {isConnecting ? 'Connecting...' : 'Reconnect'}
               </button>
@@ -2229,14 +2259,33 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
             {/* Debug Button */}
             <button
               onClick={async () => {
+                console.log('🔍 Debug button clicked')
                 await backendAIService.debugConnection()
-                toast('Check console for debug info')
+                toast('🔍 Check console for detailed debug info')
               }}
               className="px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-lg transition-colors"
-              title="Debug AI connection"
+              title="Debug AI connection - Check console for details"
             >
               Debug
             </button>
+
+            {/* Connection Status Indicator */}
+            <div className="flex items-center gap-1 text-xs">
+              <div className={`w-2 h-2 rounded-full ${
+                !aiEnabled ? 'bg-gray-500' :
+                connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 
+                connectionStatus === 'checking' ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'
+              }`} />
+              <span className={`${
+                !aiEnabled ? 'text-gray-400' :
+                connectionStatus === 'connected' ? 'text-green-400' : 
+                connectionStatus === 'checking' ? 'text-yellow-400' : 'text-red-400'
+              }`}>
+                {!aiEnabled ? 'OFF' :
+                 connectionStatus === 'connected' ? 'ONLINE' :
+                 connectionStatus === 'checking' ? 'CONNECTING' : 'OFFLINE'}
+              </span>
+            </div>
           </div>
         </div>
       </div>

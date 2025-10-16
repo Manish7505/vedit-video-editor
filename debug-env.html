@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Environment Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a1a; color: white; }
+        .info { background: #2d4a5a; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .error { background: #5a2d2d; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #2d5a2d; padding: 10px; margin: 10px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Environment Debug</h1>
+    <div id="results"></div>
+
+    <script type="module">
+        function log(message, type = 'info') {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML += `<div class="${type}">${message}</div>`;
+            console.log(message);
+        }
+        
+        // Test different API URLs
+        const testUrls = [
+            'http://localhost:8080/api/ai/status',
+            'http://localhost:5000/api/ai/status',
+            'http://127.0.0.1:8080/api/ai/status',
+            'http://127.0.0.1:5000/api/ai/status'
+        ];
+        
+        log('🧪 Testing different API URLs...');
+        
+        for (const url of testUrls) {
+            try {
+                log(`🎯 Testing: ${url}`);
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ SUCCESS: ${url} - Status: ${response.status}`, 'success');
+                    log(`📦 Data: ${JSON.stringify(data, null, 2)}`, 'success');
+                } else {
+                    log(`❌ FAILED: ${url} - Status: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ ERROR: ${url} - ${error.message}`, 'error');
+            }
+        }
+        
+        log('🔍 Environment check complete!');
+    </script>
+</body>
+</html>

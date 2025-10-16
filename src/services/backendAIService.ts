@@ -1,7 +1,8 @@
 // Backend AI Service - Handles communication with the backend OpenRouter API
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+// Force the correct API URL to fix port mismatch issue
+const API_URL = 'http://localhost:8080/api';
 
 interface BackendAIMessage {
   role: 'user' | 'assistant' | 'system';
@@ -40,7 +41,8 @@ class BackendAIService {
     console.log('🚀 BackendAIService initialized');
     console.log('📍 Base URL:', this.baseUrl);
     console.log('🌍 Environment VITE_API_URL:', import.meta.env.VITE_API_URL);
-    console.log('🔧 Fallback API_URL:', API_URL);
+    console.log('🔧 Hardcoded API_URL:', API_URL);
+    console.log('🎯 Full status URL:', `${this.baseUrl}/ai/status`);
     
     // Test connection immediately
     this.testConnection().then(connected => {

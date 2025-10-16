@@ -73,18 +73,11 @@ router.post('/chat', chatValidation, async (req, res) => {
     }
 
     try {
-      const systemPrompt = `You are an AI video editing assistant for VEdit. You help users with video editing tasks, provide creative suggestions, and execute video editing commands.
+      const systemPrompt = `You are a concise AI video editing assistant. Keep responses short and helpful.
 
-Current video context: ${context}
+Current context: ${context}
 
-You can help with:
-- Video editing commands (play, pause, add clips, split, etc.)
-- Creative suggestions for video content
-- Technical advice about video editing
-- Troubleshooting editing issues
-- Best practices for video production
-
-Keep responses concise, helpful, and focused on video editing. If the user asks about non-video editing topics, politely redirect them back to video editing.`;
+Help with video editing only. Be brief and direct.`;
 
       const completion = await openrouter.chat.completions.create({
         model: DEFAULT_MODEL,
@@ -93,7 +86,7 @@ Keep responses concise, helpful, and focused on video editing. If the user asks 
           { role: 'user', content: message }
         ],
         temperature: 0.7,
-        max_tokens: 300,
+        max_tokens: 100,
       });
 
       const aiResponse = completion.choices[0].message.content;
@@ -216,16 +209,11 @@ Respond with ONLY the JSON object:`;
     // Route based on intent
     if (intentResult.intent === 'conversation') {
       // Handle as natural conversation
-      const conversationPrompt = `You are a friendly AI video editing assistant. Respond naturally and helpfully to the user's message. Be conversational, warm, and offer to help with video editing tasks.
+      const conversationPrompt = `You are a friendly AI video editing assistant. Keep responses short and helpful.
 
-Current video context:
-- Current time: ${videoContext?.currentTime || 0}s
-- Duration: ${videoContext?.duration || 0}s
-- Clips count: ${videoContext?.clipsCount || 0}
-- Selected clip: ${videoContext?.selectedClip || 'none'}
-- Playback state: ${videoContext?.playbackState || 'paused'}
+Current context: ${videoContext?.currentTime || 0}s / ${videoContext?.duration || 0}s, ${videoContext?.clipsCount || 0} clips
 
-Respond naturally and offer to help with video editing.`;
+Be brief and offer video editing help.`;
 
       const conversationCompletion = await openrouter.chat.completions.create({
         model: DEFAULT_MODEL,
@@ -234,7 +222,7 @@ Respond naturally and offer to help with video editing.`;
           { role: 'user', content: command }
         ],
         temperature: 0.7,
-        max_tokens: 200
+        max_tokens: 80
       });
 
       const conversationResponse = conversationCompletion.choices[0]?.message?.content;
@@ -251,55 +239,18 @@ Respond naturally and offer to help with video editing.`;
 
     } else if (intentResult.intent === 'video_command') {
       // Handle as single video editing command
-      const commandPrompt = `You are an AI video editing assistant. Analyze the user's command and determine the appropriate action. You MUST respond with ONLY a valid JSON object.
+      const commandPrompt = `Analyze video command and return ONLY JSON. Be concise.
 
-Available actions:
-- play: Control video playback (play/pause)
-- seek: Jump to specific time
-- addClip: Add new video/audio clip
-- deleteClip: Remove selected clip
-- splitClip: Split clip at current position
-- addFilter: Apply visual effects (grayscale, blur, sepia, vintage, etc.)
-- addText: Add text overlay
-- adjustVolume: Change audio volume (0-100)
-- trimClip: Trim clip duration
-- adjustBrightness: Adjust video brightness (-100 to 100)
-- adjustContrast: Adjust video contrast (-100 to 100)
-- adjustSaturation: Adjust video saturation (-100 to 100)
-- adjustSpeed: Change playback speed (0.5 to 3.0)
-- applyTransition: Apply transitions (fade_in, fade_out, slide, etc.)
-- applyColorGrading: Apply color grading (cinematic, vintage, warm, cool, etc.)
-- cropVideo: Crop video (center, top, bottom, left, right)
-- transformVideo: Transform video (rotate, flip_horizontal, flip_vertical)
-- applyAudioEffect: Apply audio effects (fade_in, fade_out, echo, reverb)
-- moveClip: Move clip to different time position
-- resizeClip: Resize clip start/end times
-- duplicateClip: Duplicate selected clip
-- resetFilters: Reset all applied filters
-- undoLast: Undo last action
-- navigateTimeline: Navigate timeline (jump_to, go_forward, go_backward)
+Actions: play, seek, addFilter, addText, adjustVolume, adjustBrightness, adjustContrast, adjustSaturation, adjustSpeed, applyTransition, applyColorGrading, cropVideo, transformVideo, applyAudioEffect, moveClip, resizeClip, splitClip, duplicateClip, resetFilters, undoLast, navigateTimeline
 
-Current video context:
-- Current time: ${videoContext?.currentTime || 0}s
-- Duration: ${videoContext?.duration || 0}s
-- Clips count: ${videoContext?.clipsCount || 0}
-- Selected clip: ${videoContext?.selectedClip || 'none'}
-- Playback state: ${videoContext?.playbackState || 'paused'}
+Context: ${videoContext?.currentTime || 0}s / ${videoContext?.duration || 0}s, ${videoContext?.clipsCount || 0} clips
 
 Examples:
-"play video" → {"action": "play", "confidence": 0.9, "message": "Playing the video", "data": {}}
-"jump to 1:30" → {"action": "seek", "confidence": 0.9, "message": "Jumping to 1:30", "data": {"currentTime": 90}}
-"pause" → {"action": "play", "confidence": 0.9, "message": "Pausing the video", "data": {}}
-"make it brighter" → {"action": "adjustBrightness", "confidence": 0.9, "message": "Increasing brightness", "data": {"value": 20}}
-"apply black and white filter" → {"action": "addFilter", "confidence": 0.9, "message": "Applying grayscale filter", "data": {"filter": "grayscale"}}
-"add text 'Hello World'" → {"action": "addText", "confidence": 0.9, "message": "Adding text overlay", "data": {"text": "Hello World", "position": "center"}}
-"make it faster" → {"action": "adjustSpeed", "confidence": 0.9, "message": "Increasing playback speed", "data": {"value": 1.5}}
-"apply cinematic color grading" → {"action": "applyColorGrading", "confidence": 0.9, "message": "Applying cinematic color grading", "data": {"style": "cinematic"}}
+"play" → {"action": "play", "confidence": 0.9, "message": "Playing", "data": {}}
+"brighter" → {"action": "adjustBrightness", "confidence": 0.9, "message": "Brightening", "data": {"value": 20}}
+"grayscale" → {"action": "addFilter", "confidence": 0.9, "message": "Grayscale filter", "data": {"filter": "grayscale"}}
 
-For time commands, calculate seconds: 1:30 = 90 seconds.
-For brightness/contrast/saturation, use values from -100 to 100.
-For speed, use values from 0.5 to 3.0.
-Respond with ONLY the JSON object:`;
+Return ONLY JSON:`;
 
       const commandCompletion = await openrouter.chat.completions.create({
         model: DEFAULT_MODEL,
@@ -308,7 +259,7 @@ Respond with ONLY the JSON object:`;
           { role: 'user', content: command }
         ],
         temperature: 0.1,
-        max_tokens: 200
+        max_tokens: 100
       });
 
       const aiResponse = commandCompletion.choices[0]?.message?.content;
@@ -353,16 +304,11 @@ Respond with ONLY the JSON object:`;
 
     } else if (intentResult.intent === 'multi_task') {
       // Handle as multi-task request
-      const multiTaskPrompt = `You are an AI video editing assistant. The user has requested multiple tasks. Break down their request and provide a comprehensive response.
+      const multiTaskPrompt = `User wants multiple video tasks. Give brief, actionable steps.
 
-Current video context:
-- Current time: ${videoContext?.currentTime || 0}s
-- Duration: ${videoContext?.duration || 0}s
-- Clips count: ${videoContext?.clipsCount || 0}
-- Selected clip: ${videoContext?.selectedClip || 'none'}
-- Playback state: ${videoContext?.playbackState || 'paused'}
+Context: ${videoContext?.currentTime || 0}s / ${videoContext?.duration || 0}s, ${videoContext?.clipsCount || 0} clips
 
-Respond with a helpful explanation of how to accomplish their multi-task request. Be specific and actionable.`;
+Be concise and helpful.`;
 
       const multiTaskCompletion = await openrouter.chat.completions.create({
         model: DEFAULT_MODEL,
@@ -371,7 +317,7 @@ Respond with a helpful explanation of how to accomplish their multi-task request
           { role: 'user', content: command }
         ],
         temperature: 0.7,
-        max_tokens: 400
+        max_tokens: 150
       });
 
       const multiTaskResponse = multiTaskCompletion.choices[0]?.message?.content;
@@ -487,7 +433,7 @@ router.post('/suggestions', async (req, res) => {
         messages: [
           {
             role: 'system',
-            content: 'You are a professional video editor providing creative suggestions. Keep responses concise and actionable.'
+            content: 'You are a video editor. Keep responses very brief and actionable.'
           },
           {
             role: 'user',
@@ -495,7 +441,7 @@ router.post('/suggestions', async (req, res) => {
           }
         ],
         temperature: 0.8,
-        max_tokens: 300,
+        max_tokens: 150,
       });
 
       const suggestions = completion.choices[0].message.content

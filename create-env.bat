@@ -9,9 +9,7 @@ echo.
 echo # Clerk Authentication
 echo VITE_CLERK_PUBLISHABLE_KEY=pk_test_your-clerk-publishable-key
 echo.
-echo # Optional: Supabase
-echo VITE_SUPABASE_URL=your-supabase-url
-echo VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+rem Supabase removed (not used)
 echo.
 echo # Optional: OpenAI
 echo VITE_OPENAI_API_KEY=your-openai-api-key

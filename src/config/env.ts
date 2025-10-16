@@ -6,11 +6,6 @@ export const config = {
     model: 'gpt-3.5-turbo'
   },
   
-  // Supabase
-  supabase: {
-    url: import.meta.env.VITE_SUPABASE_URL || '',
-    anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-  },
   
   // Google Cloud (optional)
   googleCloud: {
@@ -37,14 +32,6 @@ export const validateConfig = (): { valid: boolean; missing: string[] } => {
     missing.push('VITE_OPENAI_API_KEY')
   }
   
-  if (!config.supabase.url) {
-    missing.push('VITE_SUPABASE_URL')
-  }
-  
-  if (!config.supabase.anonKey) {
-    missing.push('VITE_SUPABASE_ANON_KEY')
-  }
-  
   return {
     valid: missing.length === 0,
     missing
@@ -58,7 +45,7 @@ export const checkAPIStatus = async (): Promise<{
 }> => {
   return {
     openai: !!config.openai.apiKey,
-    supabase: !!(config.supabase.url && config.supabase.anonKey)
+    supabase: false
   }
 }
 

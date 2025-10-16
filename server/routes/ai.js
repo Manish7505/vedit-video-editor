@@ -13,6 +13,23 @@ if (process.env.OPENROUTER_API_KEY) {
   });
 }
 
+// Available OpenRouter models (free and paid)
+const AVAILABLE_MODELS = {
+  // Free models (high quality)
+  'deepseek/deepseek-chat': 'DeepSeek Chat (Free) - Excellent for text understanding',
+  'qwen/qwen-2.5-coder-7b-instruct': 'Qwen Coder (Free) - Great for coding tasks',
+  'moonshot/moonshot-v1-8k': 'Moonshot (Free) - General purpose',
+  'meta-llama/llama-3.1-8b-instruct': 'Llama 3.1 (Free) - Meta\'s model',
+  
+  // Paid models (premium)
+  'openai/gpt-4o-mini': 'GPT-4o Mini (Paid) - Fast and efficient',
+  'openai/gpt-4o': 'GPT-4o (Paid) - Most capable',
+  'anthropic/claude-3.5-sonnet': 'Claude 3.5 Sonnet (Paid) - Excellent reasoning'
+};
+
+// Default model (can be changed via environment variable)
+const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat';
+
 // Validation rules
 const chatValidation = [
   body('message')
@@ -65,7 +82,7 @@ You can help with:
 Keep responses concise, helpful, and focused on video editing. If the user asks about non-video editing topics, politely redirect them back to video editing.`;
 
       const completion = await openrouter.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: DEFAULT_MODEL,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: message }
@@ -249,7 +266,7 @@ router.post('/execute-command', async (req, res) => {
       if (openrouter) {
         try {
           const completion = await openrouter.chat.completions.create({
-            model: 'gpt-3.5-turbo',
+            model: DEFAULT_MODEL,
             messages: [
               {
                 role: 'system',
@@ -302,7 +319,9 @@ router.get('/status', async (req, res) => {
     const status = {
       available: !!openrouter,
       service: 'OpenRouter',
-      model: 'gpt-3.5-turbo',
+      model: DEFAULT_MODEL,
+      modelDescription: AVAILABLE_MODELS[DEFAULT_MODEL] || 'Custom model',
+      availableModels: AVAILABLE_MODELS,
       features: [
         'Chat assistance',
         'Command execution',
@@ -378,7 +397,7 @@ router.post('/suggestions', async (req, res) => {
 
     try {
       const completion = await openrouter.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: DEFAULT_MODEL,
         messages: [
           {
             role: 'system',

@@ -2,10 +2,10 @@
 nixPkgs = ["nodejs", "npm"]
 
 [phases.install]
-cmds = ["npm install"]
+cmds = ["npm install --production"]
 
 [phases.build]
-cmds = ["npm run build:frontend"]
+cmds = ["npm run build"]
 
 [start]
 cmd = "npm start"

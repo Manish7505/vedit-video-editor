@@ -226,7 +226,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           return analysis.message
         } else if (analysis.action === 'multi_task') {
           return analysis.message
-        } else if (analysis.confidence > 0.7) {
+        } else if (analysis.confidence && analysis.confidence > 0.7) {
           const result = await executeVideoAction(analysis, targetClip)
           return analysis.message + (result ? `\n\n${result}` : '')
         } else {
@@ -399,10 +399,10 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           return await duplicateClip(targetClip)
         
         case 'move_clip':
-          return await moveClip(targetClip, parameters.newTime)
+          return await moveClip(targetClip, data?.newTime)
         
         case 'resize_clip':
-          return await resizeClip(targetClip, parameters.newStart, parameters.newEnd)
+          return await resizeClip(targetClip, data?.newStart, data?.newEnd)
         
         default:
           return `I understand you want to ${action}, but I need more specific instructions.`
@@ -2226,7 +2226,6 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
               </button>
             )}
           </div>
-        </div>
         </div>
       </div>
 

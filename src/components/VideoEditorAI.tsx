@@ -311,38 +311,120 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
         
         case 'splitClip':
           if (data?.clipId && data?.splitTime !== undefined) {
-            // Split clip logic would go here
-            return `✅ Split clip at ${Math.floor(data.splitTime / 60)}:${String(Math.floor(data.splitTime % 60)).padStart(2, '0')}`
+            return await cutClipAtTime(data.splitTime)
           }
           return '✅ Split clip'
         
         case 'addFilter':
           if (data?.filter && targetClip) {
-            // Apply filter logic would go here
-            return `✅ Applied ${data.filter} filter`
+            return await applyEffect(targetClip, data.filter)
           }
           return '✅ Applied filter'
         
         case 'addText':
           if (data?.text && targetClip) {
-            // Add text logic would go here
-            return `✅ Added text: "${data.text}"`
+            return await addTextOverlay(targetClip, data.text, data?.position || 'center')
           }
           return '✅ Added text overlay'
         
         case 'adjustVolume':
           if (data?.volume !== undefined) {
-            // Volume adjustment logic would go here
-            return `✅ Adjusted volume to ${data.volume}%`
+            return await adjustVolume(data.volume)
           }
           return '✅ Adjusted volume'
         
         case 'trimClip':
           if (data?.startTime !== undefined || data?.endTime !== undefined) {
-            // Trim logic would go here
-            return '✅ Trimmed clip'
+            return await resizeClip(targetClip, data.startTime, data.endTime)
           }
           return '✅ Trimmed clip'
+        
+        case 'adjustBrightness':
+          if (data?.value !== undefined && targetClip) {
+            return await adjustBrightness(targetClip, data.value)
+          }
+          return '✅ Adjusted brightness'
+        
+        case 'adjustContrast':
+          if (data?.value !== undefined && targetClip) {
+            return await adjustContrast(targetClip, data.value)
+          }
+          return '✅ Adjusted contrast'
+        
+        case 'adjustSaturation':
+          if (data?.value !== undefined && targetClip) {
+            return await adjustSaturation(targetClip, data.value)
+          }
+          return '✅ Adjusted saturation'
+        
+        case 'adjustSpeed':
+          if (data?.value !== undefined) {
+            return await adjustSpeed(data.value)
+          }
+          return '✅ Adjusted speed'
+        
+        case 'applyTransition':
+          if (data?.type && targetClip) {
+            return await applyTransition(targetClip, data.type)
+          }
+          return '✅ Applied transition'
+        
+        case 'applyColorGrading':
+          if (data?.style && targetClip) {
+            return await applyColorGrading(targetClip, data.style)
+          }
+          return '✅ Applied color grading'
+        
+        case 'cropVideo':
+          if (data?.type && targetClip) {
+            return await cropVideo(targetClip, data.type)
+          }
+          return '✅ Cropped video'
+        
+        case 'transformVideo':
+          if (data?.operation && targetClip) {
+            return await transformVideo(targetClip, data.operation, data?.value || 0)
+          }
+          return '✅ Transformed video'
+        
+        case 'applyAudioEffect':
+          if (data?.effect && targetClip) {
+            return await applyAudioEffect(targetClip, data.effect)
+          }
+          return '✅ Applied audio effect'
+        
+        case 'moveClip':
+          if (data?.newTime !== undefined && targetClip) {
+            return await moveClip(targetClip, data.newTime)
+          }
+          return '✅ Moved clip'
+        
+        case 'resizeClip':
+          if ((data?.newStart !== undefined || data?.newEnd !== undefined) && targetClip) {
+            return await resizeClip(targetClip, data.newStart, data.newEnd)
+          }
+          return '✅ Resized clip'
+        
+        case 'duplicateClip':
+          if (targetClip) {
+            return await duplicateClip(targetClip)
+          }
+          return '✅ Duplicated clip'
+        
+        case 'resetFilters':
+          if (targetClip) {
+            return await resetFilters(targetClip)
+          }
+          return '✅ Reset filters'
+        
+        case 'undoLast':
+          return await undoLast()
+        
+        case 'navigateTimeline':
+          if (data?.action && data?.value !== undefined) {
+            return await navigateTimeline(data.action, data.value)
+          }
+          return '✅ Navigated timeline'
         
         // Legacy support for old format
         case 'brightness':

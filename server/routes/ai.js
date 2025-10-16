@@ -259,10 +259,25 @@ Available actions:
 - addClip: Add new video/audio clip
 - deleteClip: Remove selected clip
 - splitClip: Split clip at current position
-- addFilter: Apply visual effects
+- addFilter: Apply visual effects (grayscale, blur, sepia, vintage, etc.)
 - addText: Add text overlay
-- adjustVolume: Change audio volume
+- adjustVolume: Change audio volume (0-100)
 - trimClip: Trim clip duration
+- adjustBrightness: Adjust video brightness (-100 to 100)
+- adjustContrast: Adjust video contrast (-100 to 100)
+- adjustSaturation: Adjust video saturation (-100 to 100)
+- adjustSpeed: Change playback speed (0.5 to 3.0)
+- applyTransition: Apply transitions (fade_in, fade_out, slide, etc.)
+- applyColorGrading: Apply color grading (cinematic, vintage, warm, cool, etc.)
+- cropVideo: Crop video (center, top, bottom, left, right)
+- transformVideo: Transform video (rotate, flip_horizontal, flip_vertical)
+- applyAudioEffect: Apply audio effects (fade_in, fade_out, echo, reverb)
+- moveClip: Move clip to different time position
+- resizeClip: Resize clip start/end times
+- duplicateClip: Duplicate selected clip
+- resetFilters: Reset all applied filters
+- undoLast: Undo last action
+- navigateTimeline: Navigate timeline (jump_to, go_forward, go_backward)
 
 Current video context:
 - Current time: ${videoContext?.currentTime || 0}s
@@ -275,8 +290,15 @@ Examples:
 "play video" → {"action": "play", "confidence": 0.9, "message": "Playing the video", "data": {}}
 "jump to 1:30" → {"action": "seek", "confidence": 0.9, "message": "Jumping to 1:30", "data": {"currentTime": 90}}
 "pause" → {"action": "play", "confidence": 0.9, "message": "Pausing the video", "data": {}}
+"make it brighter" → {"action": "adjustBrightness", "confidence": 0.9, "message": "Increasing brightness", "data": {"value": 20}}
+"apply black and white filter" → {"action": "addFilter", "confidence": 0.9, "message": "Applying grayscale filter", "data": {"filter": "grayscale"}}
+"add text 'Hello World'" → {"action": "addText", "confidence": 0.9, "message": "Adding text overlay", "data": {"text": "Hello World", "position": "center"}}
+"make it faster" → {"action": "adjustSpeed", "confidence": 0.9, "message": "Increasing playback speed", "data": {"value": 1.5}}
+"apply cinematic color grading" → {"action": "applyColorGrading", "confidence": 0.9, "message": "Applying cinematic color grading", "data": {"style": "cinematic"}}
 
 For time commands, calculate seconds: 1:30 = 90 seconds.
+For brightness/contrast/saturation, use values from -100 to 100.
+For speed, use values from 0.5 to 3.0.
 Respond with ONLY the JSON object:`;
 
       const commandCompletion = await openrouter.chat.completions.create({

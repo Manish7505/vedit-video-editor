@@ -52,13 +52,21 @@ class BackendAIService {
         return this.isConnected;
       }
 
-      const response = await fetch(`${this.baseUrl}/ai/status`, {
+      // Create a timeout promise
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Connection timeout')), 5000);
+      });
+      
+      // Create the fetch promise
+      const fetchPromise = fetch(`${this.baseUrl}/ai/status`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-        signal: AbortSignal.timeout(5000) // 5 second timeout
       });
+      
+      // Race between fetch and timeout
+      const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
       
       const data = await response.json();
       this.isConnected = response.ok && data.success && data.data?.available;
@@ -77,12 +85,32 @@ class BackendAIService {
   async testConnection(): Promise<boolean> {
     try {
       console.log('Testing AI connection to:', `${this.baseUrl}/ai/status`);
-      const response = await axios.get(`${this.baseUrl}/ai/status`, {
-        timeout: 5000
+      
+      // Create a timeout promise
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Connection timeout')), 5000);
       });
       
-      const isConnected = response.status === 200 && response.data.success;
+      // Create the fetch promise
+      const fetchPromise = fetch(`${this.baseUrl}/ai/status`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      // Race between fetch and timeout
+      const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
+      
+      if (!response.ok) {
+        console.log('AI connection test result: FAILED - Response not OK');
+        return false;
+      }
+      
+      const data = await response.json();
+      const isConnected = data.success && data.data?.available;
       console.log('AI connection test result:', isConnected ? 'SUCCESS' : 'FAILED');
+      console.log('Response data:', data);
       return isConnected;
     } catch (error) {
       console.error('Backend AI service connection test failed:', error);
@@ -154,6 +182,23 @@ class BackendAIService {
   async forceConnectionCheck(): Promise<boolean> {
     this.lastConnectionCheck = 0; // Reset to force immediate check
     return await this.isAvailableAsync();
+  }
+
+  // Debug connection method
+  async debugConnection(): Promise<void> {
+    console.log('=== AI Connection Debug ===');
+    console.log('Base URL:', this.baseUrl);
+    console.log('Full URL:', `${this.baseUrl}/ai/status`);
+    console.log('Current connection status:', this.isConnected);
+    console.log('Last check time:', this.lastConnectionCheck);
+    
+    try {
+      const result = await this.testConnection();
+      console.log('Test connection result:', result);
+    } catch (error) {
+      console.error('Debug connection error:', error);
+    }
+    console.log('=== End Debug ===');
   }
 }
 

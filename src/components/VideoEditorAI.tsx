@@ -2225,6 +2225,18 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
                 {isConnecting ? 'Connecting...' : 'Reconnect'}
               </button>
             )}
+
+            {/* Debug Button */}
+            <button
+              onClick={async () => {
+                await backendAIService.debugConnection()
+                toast('Check console for debug info')
+              }}
+              className="px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-lg transition-colors"
+              title="Debug AI connection"
+            >
+              Debug
+            </button>
           </div>
         </div>
       </div>

@@ -2,8 +2,9 @@
 import axios from 'axios'
 import { logger } from '../utils/logger';
 
-// Force the correct API URL to fix port mismatch issue
-const API_URL = 'http://localhost:8080/api';
+// Dynamic API URL based on environment
+const API_URL = import.meta.env.VITE_API_URL || 
+  (import.meta.env.DEV ? 'http://localhost:8080/api' : '/api');
 
 interface BackendAIMessage {
   role: 'user' | 'assistant' | 'system';

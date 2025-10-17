@@ -1,7 +1,7 @@
 providers = ["node"]
 
 [phases.install]
-cmds = ["npm install", "cd server && npm install"]
+cmds = ["npm ci --omit=dev", "cd server && npm ci --omit=dev"]
 
 [phases.build]
 cmds = ["npm run build"]

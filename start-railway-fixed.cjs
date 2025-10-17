@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-// Ultra-simple Railway start script - guaranteed to work
-// This script prioritizes Railway health checks over complex features
+// Fixed Railway start script - no wildcard routes
+// This script avoids the path-to-regexp error completely
 
 const express = require('express');
 const path = require('path');
 
-console.log('🚀 Starting VEdit Railway Simple Server...');
+console.log('🚀 Starting VEdit Railway Fixed Server...');
 console.log('📁 Working directory:', process.cwd());
 console.log('🌍 Environment:', process.env.NODE_ENV || 'production');
 console.log('🔌 Port:', process.env.PORT || '8080');
@@ -14,11 +14,11 @@ console.log('🔌 Port:', process.env.PORT || '8080');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Basic middleware - minimal setup
+// Basic middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// CORS - allow all origins for Railway
+// CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -45,7 +45,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// Additional health check endpoint
+// Additional health check endpoints
 app.get('/health', (req, res) => {
   console.log('✅ Health check requested at /health');
   res.status(200).json({ 
@@ -56,7 +56,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API health check
 app.get('/api/health', (req, res) => {
   console.log('✅ API health check requested');
   res.status(200).json({ 
@@ -67,21 +66,18 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Try to load backend routes with minimal error handling
+// Try to load backend routes
 try {
   console.log('📦 Attempting to load backend routes...');
   
-  // Load AI routes
   const aiRoutes = require('./server/routes/ai');
   app.use('/api/ai', aiRoutes);
   console.log('✅ AI routes loaded');
   
-  // Load render routes
   const renderRoutes = require('./server/routes/render');
   app.use('/api/render', renderRoutes);
   console.log('✅ Render routes loaded');
   
-  // Load render queue routes
   const renderQueueRoutes = require('./server/routes/renderQueue');
   app.use('/api/render-queue', renderQueueRoutes);
   console.log('✅ Render queue routes loaded');
@@ -102,9 +98,26 @@ try {
   });
 }
 
-// Serve React app for all other routes (catch-all)
-app.get('*', (req, res) => {
-  // Skip API routes
+// Specific routes for common paths (avoid wildcard)
+app.get('/video-editor', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+app.get('/about', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+app.get('/contact', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+// Handle 404 for unknown routes
+app.use((req, res) => {
+  // If it's an API route, return JSON 404
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ 
       message: 'API endpoint not found',
@@ -112,11 +125,11 @@ app.get('*', (req, res) => {
     });
   }
   
-  // Serve React app for all other routes
+  // For all other routes, serve the React app
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// Start server with comprehensive error handling
+// Start server
 const server = app.listen(PORT, '0.0.0.0', (err) => {
   if (err) {
     console.error('❌ Failed to start server:', err);
@@ -127,7 +140,6 @@ const server = app.listen(PORT, '0.0.0.0', (err) => {
   console.log(`🌐 Frontend served from /dist`);
   console.log(`🔗 Health check at /`);
   console.log(`❤️ API health check at /api/health`);
-  console.log(`📊 Additional health check at /health`);
   
   // Test health check immediately
   setTimeout(() => {

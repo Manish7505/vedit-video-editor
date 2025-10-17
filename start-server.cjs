@@ -19,11 +19,26 @@ const PORT = process.env.PORT || 8080;
 // Serve static files from the dist directory (built frontend)
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Import and use backend routes
-const aiRoutes = require('./server/routes/ai');
-const renderRoutes = require('./server/routes/render');
-const renderQueueRoutes = require('./server/routes/renderQueue');
-const { errorHandler } = require('./server/middleware/errorHandler');
+// Import and use backend routes (with error handling)
+let aiRoutes, renderRoutes, renderQueueRoutes, errorHandler;
+
+try {
+  aiRoutes = require('./server/routes/ai');
+  renderRoutes = require('./server/routes/render');
+  renderQueueRoutes = require('./server/routes/renderQueue');
+  errorHandler = require('./server/middleware/errorHandler');
+  console.log('✅ Backend routes loaded successfully');
+} catch (error) {
+  console.error('❌ Failed to load backend routes:', error.message);
+  // Create fallback routes
+  aiRoutes = express.Router();
+  renderRoutes = express.Router();
+  renderQueueRoutes = express.Router();
+  errorHandler = (err, req, res, next) => {
+    console.error('Error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  };
+}
 
 // Middleware
 app.use(express.json());
@@ -46,13 +61,34 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/render', renderRoutes);
 app.use('/api/render-queue', renderQueueRoutes);
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
+// Root endpoint for Railway health checks
+app.get('/', (req, res) => {
   res.json({ 
     status: 'OK', 
+    message: 'VEdit Video Editor is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'production'
   });
+});
+
+// Health check endpoint (simple, no dependencies)
+app.get('/api/health', (req, res) => {
+  try {
+    res.status(200).json({ 
+      status: 'OK', 
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'production',
+      port: PORT,
+      uptime: process.uptime()
+    });
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(500).json({ 
+      status: 'ERROR', 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Serve React app for all other routes

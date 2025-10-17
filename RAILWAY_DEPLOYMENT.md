@@ -48,7 +48,6 @@ Set these in Railway dashboard:
 ```
 VITE_API_URL=https://your-app.railway.app/api
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_your-key
-VITE_OPENROUTER_API_KEY=your-openrouter-key
 VITE_VAPI_PUBLIC_KEY=your-vapi-key
 VITE_VAPI_WORKFLOW_ID=your-workflow-id
 VITE_VAPI_VIDEO_PUBLIC_KEY=your-vapi-key

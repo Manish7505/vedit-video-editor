@@ -18,16 +18,7 @@ interface BackendAIResponse {
   data?: any;
 }
 
-interface VideoContext {
-  currentTime: number;
-  duration: number;
-  clipsCount: number;
-  selectedClip: string | null;
-  clips: any[];
-  tracks: any[];
-  playbackState: 'playing' | 'paused';
-  currentEffects: any;
-}
+import { VideoContext } from '../types/videoContext'
 
 class BackendAIService {
   private baseUrl: string;

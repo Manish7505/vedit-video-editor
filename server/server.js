@@ -7,6 +7,12 @@ const http = require('http');
 const socketIo = require('socket.io');
 require('dotenv').config();
 
+// Debug environment variables
+console.log('🔍 Environment Debug:');
+console.log('OPENROUTER_API_KEY:', process.env.OPENROUTER_API_KEY ? 'SET' : 'NOT SET');
+console.log('PORT:', process.env.PORT);
+console.log('NODE_ENV:', process.env.NODE_ENV);
+
 // Define PORT early to avoid reference errors
 const PORT = Number(process.env.PORT || 8080);
 

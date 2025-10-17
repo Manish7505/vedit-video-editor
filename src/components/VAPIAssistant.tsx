@@ -10,13 +10,8 @@ import {
   User
 } from 'lucide-react'
 import { vapiSessionManager } from '../services/vapiSessionManager'
-
-interface Message {
-  id: string
-  type: 'user' | 'assistant' | 'system'
-  content: string
-  timestamp: Date
-}
+import { Message } from '../types/message'
+import { logger } from '../utils/logger'
 
 interface VAPIAssistantProps {
   workflowId?: string
@@ -63,7 +58,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
       // Stop the stream immediately - we just needed permission
       stream.getTracks().forEach(track => track.stop())
       
-      console.log('✅ Audio feedback prevention configured')
+      logger.debug('✅ Audio feedback prevention configured')
     } catch (err) {
       console.error('Error configuring audio feedback prevention:', err)
     }
@@ -103,7 +98,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
   useEffect(() => {
     const handleCallEnded = (event: CustomEvent) => {
       if (event.detail.source !== 'homepage-assistant' && isConnected) {
-        console.log('📞 Call ended by another assistant, cleaning up...')
+        logger.info('📞 Call ended by another assistant, cleaning up...')
         // Reset states when another assistant ends the call
         setIsConnected(false)
         setIsLoading(false)
@@ -122,7 +117,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
     }
 
     const handlePageUnload = () => {
-      console.log('🚪 Page unloading, cleaning up VAPI...')
+      logger.info('🚪 Page unloading, cleaning up VAPI...')
       if (vapiRef.current && isConnected) {
         try {
           vapiRef.current.stop()
@@ -173,7 +168,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
       try {
         // Dynamically import VAPI
         const Vapi = (await import('@vapi-ai/web')).default
-        console.log('🔧 Initializing VAPI with public key:', publicKey.substring(0, 8) + '...')
+        logger.info('🔧 Initializing VAPI with public key:', publicKey.substring(0, 8) + '...')
         
         // Initialize VAPI with proper audio configuration to prevent feedback
         vapiRef.current = new Vapi(publicKey)
@@ -183,7 +178,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
         
         // Set up event listeners
         vapiRef.current.on('call-start', () => {
-          console.log('✅ Call started successfully')
+          logger.info('✅ Call started successfully')
           setIsConnected(true)
           setIsLoading(false)
           setError(null)
@@ -246,7 +241,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
         })
 
         vapiRef.current.on('message', (message: any) => {
-          console.log('💬 Message received:', message)
+          logger.debug('💬 Message received:', message)
           
           // Handle transcript messages
           if (message.type === 'transcript') {
@@ -261,7 +256,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
           
           // Handle conversation updates
           if (message.type === 'conversation-update') {
-            console.log('Conversation update:', message)
+            logger.debug('Conversation update:', message)
           }
         })
 
@@ -296,7 +291,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
 
         setIsInitialized(true)
         setStatusMessage('Ready to help! Click to start talking.')
-        console.log('✅ VAPI initialized successfully')
+        logger.info('✅ VAPI initialized successfully')
 
       } catch (err: any) {
         console.error('Failed to initialize VAPI:', err)
@@ -310,7 +305,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
     // Cleanup function
     return () => {
       if (vapiRef.current) {
-        console.log('🧹 Cleaning up VAPI...')
+        logger.debug('🧹 Cleaning up VAPI...')
         try {
           if (isConnected) {
             vapiRef.current.stop()
@@ -349,7 +344,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
       // Prevent audio feedback before starting call
       await preventAudioFeedback()
       
-      console.log('🚀 Starting VAPI call with workflow ID:', configWorkflowId)
+      logger.info('🚀 Starting VAPI call with workflow ID:', configWorkflowId)
       
       // Use the correct VAPI start method format
       await vapiRef.current.start(configWorkflowId)
@@ -367,12 +362,10 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
   }
 
   const endCall = async () => {
-    console.log('🛑 Attempting to end call...')
-    console.log('🔍 Debug - vapiRef.current:', !!vapiRef.current)
-    console.log('🔍 Debug - isConnected:', isConnected)
+    logger.info('🛑 Attempting to end call...')
     
     if (!vapiRef.current || !isConnected) {
-      console.log('⚠️ No active VAPI call to stop')
+      logger.warn('⚠️ No active VAPI call to stop')
       // Still reset states and clean up session
       setIsConnected(false)
       setIsLoading(false)
@@ -386,7 +379,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
 
     // Add a timeout to force cleanup if the call doesn't end within 5 seconds
     const forceCleanupTimeout = setTimeout(() => {
-      console.log('⚠️ Force cleanup triggered - call did not end within 5 seconds')
+      logger.warn('⚠️ Force cleanup triggered - call did not end within 5 seconds')
       setIsConnected(false)
       setIsLoading(false)
       setIsSpeaking(false)
@@ -401,9 +394,9 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
       setIsLoading(true)
       setStatusMessage('Ending call...')
       
-      console.log('🛑 Stopping VAPI call...')
+      logger.info('🛑 Stopping VAPI call...')
       await vapiRef.current.stop()
-      console.log('✅ VAPI stop successful')
+      logger.info('✅ VAPI stop successful')
       
       // Remove all event listeners before cleanup
       if (vapiRef.current) {
@@ -434,7 +427,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
         // Clear the force cleanup timeout since call ended successfully
         clearTimeout(forceCleanupTimeout)
         
-        console.log('✅ Call cleanup completed successfully')
+        logger.info('✅ Call cleanup completed successfully')
         
       } catch (cleanupErr) {
         console.error('❌ Error during cleanup:', cleanupErr)
@@ -456,7 +449,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
     if (vapiRef.current && isConnected) {
       try {
         const newMutedState = !isMuted
-        console.log(`🔇 ${newMutedState ? 'Muting' : 'Unmuting'} microphone...`)
+        logger.debug(`🔇 ${newMutedState ? 'Muting' : 'Unmuting'} microphone...`)
         vapiRef.current.setMuted(newMutedState)
         setIsMuted(newMutedState)
         setStatusMessage(newMutedState ? 'Microphone muted' : 'Microphone active')

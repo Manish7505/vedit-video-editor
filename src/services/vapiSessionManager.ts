@@ -1,10 +1,12 @@
+import { logger } from '../utils/logger'
+
 class VAPISessionManager {
   private activeCall: 'homepage' | 'video-editor' | null = null
   private callStartTime: Date | null = null
 
   startCall(assistantType: 'homepage' | 'video-editor'): boolean {
     if (this.activeCall && this.activeCall !== assistantType) {
-      console.log(`⚠️ Another assistant (${this.activeCall}) is already in a call`)
+      logger.warn(`⚠️ Another assistant (${this.activeCall}) is already in a call`)
       return false
     }
 
@@ -17,7 +19,7 @@ class VAPISessionManager {
       detail: { source: assistantType } 
     }))
     
-    console.log(`✅ Started call: ${assistantType}`)
+    logger.info(`✅ Started call: ${assistantType}`)
     return true
   }
 
@@ -32,10 +34,10 @@ class VAPISessionManager {
         detail: { source: assistantType } 
       }))
       
-      console.log(`✅ Ended call: ${assistantType}`)
+      logger.info(`✅ Ended call: ${assistantType}`)
     } else if (this.activeCall) {
       // If there's an active call but different type, still end it
-      console.log(`⚠️ Call mismatch: expected ${assistantType}, got ${this.activeCall}. Ending anyway.`)
+      logger.warn(`⚠️ Call mismatch: expected ${assistantType}, got ${this.activeCall}. Ending anyway.`)
       this.activeCall = null
       this.callStartTime = null
       window.sessionStorage.removeItem('vapi-active-call')
@@ -45,15 +47,15 @@ class VAPISessionManager {
         detail: { source: this.activeCall || assistantType } 
       }))
       
-      console.log(`✅ Force ended call: ${assistantType}`)
+      logger.info(`✅ Force ended call: ${assistantType}`)
     } else {
-      console.log(`⚠️ No active call to end for ${assistantType}`)
+      logger.warn(`⚠️ No active call to end for ${assistantType}`)
     }
   }
 
   endAnyCall(): void {
     if (this.activeCall) {
-      console.log(`🛑 Ending any active call: ${this.activeCall}`)
+      logger.info(`🛑 Ending any active call: ${this.activeCall}`)
       this.activeCall = null
       this.callStartTime = null
       window.sessionStorage.removeItem('vapi-active-call')
@@ -63,7 +65,7 @@ class VAPISessionManager {
         detail: { source: 'any' } 
       }))
       
-      console.log(`✅ Ended any active call`)
+      logger.info(`✅ Ended any active call`)
     }
   }
 

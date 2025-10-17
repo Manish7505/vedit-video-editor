@@ -12,14 +12,9 @@ import {
 } from 'lucide-react'
 import { useVideoEditor } from '../contexts/VideoEditorContext'
 import { vapiSessionManager } from '../services/vapiSessionManager'
+import { Message } from '../types/message'
+import { logger } from '../utils/logger'
 import toast from 'react-hot-toast'
-
-interface Message {
-  id: string
-  type: 'user' | 'assistant' | 'system'
-  content: string
-  timestamp: Date
-}
 
 interface VideoEditorVAPIAssistantProps {
   workflowId?: string
@@ -32,7 +27,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
   assistantId,
   position = 'bottom-left'
 }) => {
-  console.log('🎬 VideoEditorVAPIAssistant rendering...', { workflowId, assistantId, position })
+  logger.debug('🎬 VideoEditorVAPIAssistant rendering...', { workflowId, assistantId, position })
   
   const [isOpen, setIsOpen] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
@@ -502,7 +497,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
   useEffect(() => {
     const handleCallEnded = (event: CustomEvent) => {
       if (event.detail.source !== 'video-editor-assistant' && isConnected) {
-        console.log('📞 Call ended by another assistant, cleaning up video editor...')
+        logger.info('📞 Call ended by another assistant, cleaning up video editor...')
         // Reset states when another assistant ends the call
         setIsConnected(false)
         setIsLoading(false)
@@ -521,7 +516,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
     }
 
     const handlePageUnload = () => {
-      console.log('🚪 Video editor page unloading, cleaning up VAPI...')
+      logger.info('🚪 Video editor page unloading, cleaning up VAPI...')
       if (vapiRef.current && isConnected) {
         try {
           vapiRef.current.stop()
@@ -572,7 +567,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
       try {
         // Dynamically import VAPI
         const Vapi = (await import('@vapi-ai/web')).default
-        console.log('🔧 Initializing Video Editor VAPI with public key:', publicKey.substring(0, 8) + '...')
+        logger.info('🔧 Initializing Video Editor VAPI with public key:', publicKey.substring(0, 8) + '...')
         
         // Initialize VAPI with proper audio configuration to prevent feedback
         vapiRef.current = new Vapi(publicKey)
@@ -582,7 +577,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
         
         // Set up event listeners
         vapiRef.current.on('call-start', () => {
-          console.log('✅ Video Editor Call started successfully')
+          logger.info('✅ Video Editor Call started successfully')
           setIsConnected(true)
           setIsLoading(false)
           setError(null)
@@ -593,7 +588,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
         })
 
         vapiRef.current.on('call-end', () => {
-          console.log('📞 Video Editor Call ended by VAPI')
+          logger.info('📞 Video Editor Call ended by VAPI')
           setIsConnected(false)
           setIsLoading(false)
           setIsSpeaking(false)
@@ -609,7 +604,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
         })
 
         vapiRef.current.on('speech-start', (data: any) => {
-          console.log('🎤 Video Editor Speech started:', data)
+          logger.debug('🎤 Video Editor Speech started:', data)
           if (data.role === 'assistant') {
             setIsSpeaking(true)
             setIsListening(false)
@@ -621,7 +616,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
         })
 
         vapiRef.current.on('speech-end', (data: any) => {
-          console.log('🔇 Video Editor Speech ended:', data)
+          logger.debug('🔇 Video Editor Speech ended:', data)
           if (data.role === 'assistant') {
             setIsSpeaking(false)
             setIsListening(true)
@@ -634,19 +629,19 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
 
         // Alternative event listeners for better compatibility
         vapiRef.current.on('user-speech-start', () => {
-          console.log('🎤 User started speaking (alternative)')
+          logger.debug('🎤 User started speaking (alternative)')
           setIsListening(false)
           setStatusMessage('You are speaking...')
         })
 
         vapiRef.current.on('user-speech-end', () => {
-          console.log('🔇 User finished speaking (alternative)')
+          logger.debug('🔇 User finished speaking (alternative)')
           setIsListening(true)
           setStatusMessage('Listening for commands...')
         })
 
         vapiRef.current.on('message', async (message: any) => {
-          console.log('💬 Video Editor Message received:', message)
+          logger.debug('💬 Video Editor Message received:', message)
           
           // Handle transcript messages
           if (message.type === 'transcript') {
@@ -672,7 +667,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
           
           // Handle conversation updates
           if (message.type === 'conversation-update') {
-            console.log('Conversation update:', message)
+            logger.debug('Conversation update:', message)
           }
         })
 
@@ -701,7 +696,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
 
         setIsInitialized(true)
         setStatusMessage('Ready to edit! Click to start.')
-        console.log('✅ Video Editor VAPI initialized successfully')
+        logger.info('✅ Video Editor VAPI initialized successfully')
 
       } catch (err: any) {
         console.error('Failed to initialize Video Editor VAPI:', err)
@@ -715,7 +710,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
     // Cleanup function
     return () => {
       if (vapiRef.current) {
-        console.log('🧹 Cleaning up Video Editor VAPI...')
+        logger.debug('🧹 Cleaning up Video Editor VAPI...')
         try {
           vapiRef.current.stop()
         } catch (err) {
@@ -749,7 +744,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
       setError(null)
       setStatusMessage('Connecting...')
       
-      console.log('🚀 Starting Video Editor VAPI call with:', { workflowId: configWorkflowId, assistantId: configAssistantId })
+      logger.info('🚀 Starting Video Editor VAPI call with:', { workflowId: configWorkflowId, assistantId: configAssistantId })
       
       // Start call using workflow id string (preferred)
       if (configWorkflowId) {
@@ -773,12 +768,10 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
   }
 
   const endCall = async () => {
-    console.log('🛑 Attempting to end video editor call...')
-    console.log('🔍 Debug - vapiRef.current:', !!vapiRef.current)
-    console.log('🔍 Debug - isConnected:', isConnected)
+    logger.info('🛑 Attempting to end video editor call...')
     
     if (!vapiRef.current || !isConnected) {
-      console.log('⚠️ No active VAPI video editor call to stop')
+      logger.warn('⚠️ No active VAPI video editor call to stop')
       // Still reset states and clean up session
       setIsConnected(false)
       setIsLoading(false)
@@ -792,7 +785,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
 
     // Add timeout to force cleanup if call doesn't end
     const forceCleanupTimeout = setTimeout(() => {
-      console.log('⚠️ Force cleanup triggered - call did not end within 3 seconds')
+      logger.warn('⚠️ Force cleanup triggered - call did not end within 3 seconds')
       setIsConnected(false)
       setIsLoading(false)
       setIsSpeaking(false)
@@ -820,12 +813,12 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
       setIsSpeaking(false)
       setIsListening(false)
       
-      console.log('🛑 Stopping VAPI video editor call...')
+      logger.info('🛑 Stopping VAPI video editor call...')
       
       // Try multiple methods to stop the call
       try {
         await vapiRef.current.stop()
-        console.log('✅ VAPI video editor stop successful')
+        logger.info('✅ VAPI video editor stop successful')
       } catch (stopError) {
         console.warn('⚠️ Primary stop failed, trying alternative methods:', stopError)
         
@@ -833,14 +826,14 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
         try {
           if (vapiRef.current && typeof vapiRef.current.destroy === 'function') {
             await vapiRef.current.destroy()
-            console.log('✅ VAPI destroyed successfully')
+            logger.info('✅ VAPI destroyed successfully')
           }
         } catch (destroyError) {
           console.warn('⚠️ Destroy failed:', destroyError)
         }
         
         // Force cleanup regardless
-        console.log('🔄 Forcing cleanup after stop failure')
+        logger.warn('🔄 Forcing cleanup after stop failure')
       }
       
       // Remove event listeners
@@ -869,7 +862,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
       // Clear the timeout
       clearTimeout(forceCleanupTimeout)
       
-      console.log('✅ Video editor call cleanup completed successfully')
+      logger.info('✅ Video editor call cleanup completed successfully')
     }
   }
 
@@ -877,7 +870,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
     if (vapiRef.current && isConnected) {
       try {
         const newMutedState = !isMuted
-        console.log(`🔇 ${newMutedState ? 'Muting' : 'Unmuting'} microphone...`)
+        logger.debug(`🔇 ${newMutedState ? 'Muting' : 'Unmuting'} microphone...`)
         vapiRef.current.setMuted(newMutedState)
         setIsMuted(newMutedState)
         setStatusMessage(newMutedState ? 'Microphone muted' : 'Microphone active')
@@ -946,7 +939,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
       >
         <motion.button
           onClick={() => {
-            console.log('🎬 VideoEditorVAPIAssistant button clicked!', { isOpen })
+            logger.debug('🎬 VideoEditorVAPIAssistant button clicked!', { isOpen })
             setIsOpen(!isOpen)
           }}
           className={`

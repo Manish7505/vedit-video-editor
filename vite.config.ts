@@ -7,5 +7,18 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          vapi: ['@vapi-ai/web'],
+          ui: ['framer-motion', 'lucide-react'],
+          utils: ['axios', 'zustand']
+        }
+      }
+    },
+    chunkSizeWarningLimit: 1000
   }
 })

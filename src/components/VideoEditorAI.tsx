@@ -4,25 +4,16 @@ import {
   Mic, 
   MicOff, 
   Send, 
-  Bot, 
   User,
   Loader2,
-  Sparkles,
-  Zap,
-  Settings
+  Zap
 } from 'lucide-react'
 import { useVideoEditor } from '../contexts/VideoEditorContext'
 import { useVideoEditorStore } from '../stores/videoEditorStore'
 import { backendAIService } from '../services/backendAIService'
+import { Message } from '../types/message'
+import { logger } from '../utils/logger'
 import toast from 'react-hot-toast'
-
-interface Message {
-  id: string
-  type: 'user' | 'assistant' | 'system'
-  content: string
-  timestamp: Date
-  action?: string
-}
 
 interface VideoEditorAIProps {
   isOpen: boolean
@@ -134,31 +125,31 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
       setConnectionStatus('checking')
       
       try {
-        console.log(`🔄 AI connection check attempt ${retryCount + 1}`)
+        logger.debug(`🔄 AI connection check attempt ${retryCount + 1}`)
         const isConnected = await backendAIService.testConnection()
-        console.log('✅ AI connection result:', isConnected)
+        logger.debug('✅ AI connection result:', isConnected)
         setConnectionStatus(isConnected ? 'connected' : 'disconnected')
         
         if (isConnected) {
-          toast.success('🤖 AI Connected! Advanced features enabled.')
+          // AI Connected
         } else if (retryCount < 2) {
           // Retry up to 3 times
-          console.log(`🔄 Retrying connection in 2 seconds... (${retryCount + 1}/3)`)
+          logger.debug(`🔄 Retrying connection in 2 seconds... (${retryCount + 1}/3)`)
           setTimeout(() => checkConnection(retryCount + 1), 2000)
           return
         } else {
-          toast.error('❌ AI connection failed. Using basic mode.')
+          // AI connection failed
         }
       } catch (error) {
         console.error('❌ AI connection error:', error)
         setConnectionStatus('disconnected')
         
         if (retryCount < 2) {
-          console.log(`🔄 Retrying connection in 2 seconds... (${retryCount + 1}/3)`)
+          logger.debug(`🔄 Retrying connection in 2 seconds... (${retryCount + 1}/3)`)
           setTimeout(() => checkConnection(retryCount + 1), 2000)
           return
         } else {
-          toast.error('❌ AI service unavailable. Using basic mode.')
+          // AI service unavailable
         }
       } finally {
         setIsConnecting(false)
@@ -174,18 +165,18 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
 
     const interval = setInterval(async () => {
       try {
-        console.log('🔄 Periodic AI connection check...')
+        logger.debug('🔄 Periodic AI connection check...')
         const isConnected = await backendAIService.isAvailableAsync()
         const newStatus = isConnected ? 'connected' : 'disconnected'
         
         if (newStatus !== connectionStatus) {
-          console.log(`📊 Connection status changed: ${connectionStatus} → ${newStatus}`)
+          logger.debug(`📊 Connection status changed: ${connectionStatus} → ${newStatus}`)
           setConnectionStatus(newStatus)
           
           if (newStatus === 'connected') {
-            toast.success('🤖 AI reconnected!')
+            // AI reconnected
           } else {
-            toast.error('❌ AI disconnected')
+            // AI disconnected
           }
         }
       } catch (error) {
@@ -207,9 +198,14 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
       recognitionRef.current.stop()
       setIsListening(false)
     } else {
-      recognitionRef.current.start()
-      setIsListening(true)
-      addMessage('system', 'Listening...')
+      try {
+        recognitionRef.current.start()
+        addMessage('system', 'Listening...')
+      } catch (error) {
+        console.error('Failed to start speech recognition:', error)
+        setIsListening(false)
+        toast.error('Failed to start speech recognition. Please try again.')
+      }
     }
   }
 
@@ -238,11 +234,11 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
     }
 
     // Command processing logic
-    console.log('Processing command. AI Enabled:', aiEnabled, 'Connection Status:', connectionStatus)
+    logger.debug('Processing command. AI Enabled:', aiEnabled, 'Connection Status:', connectionStatus)
     
     if (aiEnabled && connectionStatus === 'connected') {
       // AI Powered Mode - Use real AI
-      console.log('🤖 Using AI Powered Mode...')
+      logger.debug('🤖 Using AI Powered Mode...')
       try {
         const analysis = await backendAIService.analyzeVideoCommand(command, videoContext)
         
@@ -265,7 +261,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
     }
     
     // Basic Mode - Use keyword matching
-    console.log('⚡ Using Basic Mode...')
+    logger.debug('⚡ Using Basic Mode...')
     const basicResult = await processBasicCommand(command, targetClip)
     
     if (aiEnabled && connectionStatus !== 'connected') {
@@ -565,7 +561,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
         }
       } as any)
       
-      toast.success(`Made video brighter to ${newBrightness}%`)
+      // Video made brighter
       return `✅ Made the video brighter to ${newBrightness}%`
     }
 
@@ -588,7 +584,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
         }
       } as any)
       
-      toast.success(`Made video darker to ${newBrightness}%`)
+      // Video made darker
       return `✅ Made the video darker to ${newBrightness}%`
     }
 
@@ -611,7 +607,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
         }
       } as any)
       
-      toast.success(`Made video more colorful to ${newSaturation}%`)
+      // Video made more colorful
       return `✅ Made the video more colorful to ${newSaturation}%`
     }
 
@@ -635,7 +631,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           }
         } as any)
         
-        toast.success(`Increased contrast to ${newContrast}%`)
+        // Contrast increased
         return `✅ Increased contrast to ${newContrast}% for "${workingClip.name}"`
       } else if (lowerCommand.includes('decrease') || lowerCommand.includes('less') || lowerCommand.includes('reduce')) {
         const currentFilters = (workingClip as any).filters || {}
@@ -650,7 +646,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           }
         } as any)
         
-        toast.success(`Decreased contrast to ${newContrast}%`)
+        // Contrast decreased
         return `✅ Decreased contrast to ${newContrast}% for "${workingClip.name}"`
       } else {
         // Just contrast without increase/decrease
@@ -666,7 +662,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           }
         } as any)
         
-        toast.success(`Set contrast to ${value}%`)
+        // Contrast set
         return `✅ Set contrast to ${value}% for "${workingClip.name}"`
       }
     }
@@ -691,7 +687,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           }
         } as any)
         
-        toast.success(`Increased saturation to ${newSaturation}%`)
+        // Saturation increased
         return `✅ Increased saturation to ${newSaturation}% for "${workingClip.name}"`
       } else if (lowerCommand.includes('decrease')) {
         const currentFilters = (workingClip as any).filters || {}
@@ -706,7 +702,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           }
         } as any)
         
-        toast.success(`Decreased saturation to ${newSaturation}%`)
+        // Saturation decreased
         return `✅ Decreased saturation to ${newSaturation}% for "${workingClip.name}"`
       }
     }
@@ -722,28 +718,28 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
         mediaElements.forEach((element: any) => {
           element.volume = Math.min(1, value / 100)
         })
-        toast.success(`Increased volume to ${value}%`)
+        // Volume increased
         return `✅ Increased volume to ${value}%`
       } else if (lowerCommand.includes('decrease') || lowerCommand.includes('down')) {
         const mediaElements = document.querySelectorAll('video, audio')
         mediaElements.forEach((element: any) => {
           element.volume = Math.min(1, value / 100)
         })
-        toast.success(`Decreased volume to ${value}%`)
+        // Volume decreased
         return `✅ Decreased volume to ${value}%`
       } else if (lowerCommand.includes('mute')) {
         const mediaElements = document.querySelectorAll('video, audio')
         mediaElements.forEach((element: any) => {
           element.muted = true
         })
-        toast.success('Audio muted')
+        // Audio muted
         return `✅ Muted all audio`
       } else if (lowerCommand.includes('unmute')) {
         const mediaElements = document.querySelectorAll('video, audio')
         mediaElements.forEach((element: any) => {
           element.muted = false
         })
-        toast.success('Audio unmuted')
+        // Audio unmuted
         return `✅ Unmuted all audio`
       }
     }
@@ -752,18 +748,18 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
     if (lowerCommand.includes('speed') || lowerCommand.includes('slow') || lowerCommand.includes('fast')) {
       if (lowerCommand.includes('slow')) {
         setPlaybackRate(0.5)
-        toast.success('Slowed down playback to 0.5x')
+        // Playback slowed
         return '✅ Slowed down playback speed to 0.5x'
       } else if (lowerCommand.includes('fast')) {
         setPlaybackRate(2.0)
-        toast.success('Sped up playback to 2x')
+        // Playback sped up
         return '✅ Sped up playback speed to 2x'
       } else {
         const match = lowerCommand.match(/(\d+\.?\d*)/)
         if (match) {
           const speed = parseFloat(match[0])
           setPlaybackRate(speed)
-          toast.success(`Set playback speed to ${speed}x`)
+          // Playback speed set
           return `✅ Set playback speed to ${speed}x`
         }
       }
@@ -772,11 +768,11 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
     // Play/Pause commands
     if (lowerCommand.includes('play') && !lowerCommand.includes('speed')) {
       setIsPlaying(true)
-      toast.success('Playing video')
+      // Video playing
       return '✅ Playing video'
     } else if (lowerCommand.includes('pause') || lowerCommand.includes('stop')) {
       setIsPlaying(false)
-      toast.success('Paused video')
+      // Video paused
       return '✅ Paused video'
     }
 
@@ -1121,26 +1117,53 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
       recognitionRef.current.continuous = false
       recognitionRef.current.interimResults = false
       recognitionRef.current.lang = 'en-US'
+      recognitionRef.current.maxAlternatives = 1
 
       recognitionRef.current.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript
-        setInputValue(transcript)
-        // Process the transcript directly
-        processCommand(transcript).then(response => {
-          addMessage('assistant', response)
-        }).catch(() => {
-          addMessage('assistant', 'Sorry, I encountered an error processing your command. Please try again.')
-        })
+        if (transcript && transcript.trim().length > 0) {
+          setInputValue(transcript)
+          // Process the transcript directly
+          processCommand(transcript).then(response => {
+            addMessage('assistant', response)
+          }).catch(() => {
+            addMessage('assistant', 'Sorry, I encountered an error processing your command. Please try again.')
+          })
+        }
       }
 
       recognitionRef.current.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error)
         setIsListening(false)
-        toast.error('Speech recognition error. Please try again.')
+        
+        // Handle specific error types
+        switch (event.error) {
+          case 'no-speech':
+            // Don't show error for no-speech, just stop listening
+            break
+          case 'audio-capture':
+            toast.error('Microphone not found. Please check your microphone.')
+            break
+          case 'not-allowed':
+            toast.error('Microphone permission denied. Please allow microphone access.')
+            break
+          case 'network':
+            toast.error('Network error. Please check your connection.')
+            break
+          default:
+            // Only show generic error for other cases
+            if (event.error !== 'aborted') {
+              toast.error('Speech recognition error. Please try again.')
+            }
+        }
       }
 
       recognitionRef.current.onend = () => {
         setIsListening(false)
+      }
+
+      recognitionRef.current.onstart = () => {
+        setIsListening(true)
       }
     }
 
@@ -2228,191 +2251,105 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
   if (!isOpen) return null
 
   return (
-    <div className={`flex flex-col h-full ${isInSidebar ? 'bg-gray-900' : 'bg-white'} ai-assistant-sidebar`}>
+    <div className="h-full flex flex-col bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 ai-assistant-sidebar relative overflow-hidden">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute inset-0" style={{
+          backgroundImage: `radial-gradient(circle at 25% 25%, #3b82f6 0%, transparent 50%), 
+                           radial-gradient(circle at 75% 75%, #8b5cf6 0%, transparent 50%),
+                           radial-gradient(circle at 50% 50%, #06b6d4 0%, transparent 50%)`,
+        }} />
+      </div>
+      
       {/* Header */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-gray-700/50 bg-gradient-to-r from-gray-800 to-gray-750">
+      <div className="relative flex-shrink-0 px-3 py-2 border-b border-slate-700/30 bg-gradient-to-r from-slate-800/80 to-slate-700/80 backdrop-blur-sm">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 p-0.5">
-            <div className="w-full h-full rounded-xl bg-gray-800 flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-          </div>
+          {/* AI Avatar */}
           <div>
-            <h3 className="font-bold text-white">AI Video Editor</h3>
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${
-                  !aiEnabled ? 'bg-gray-500' :
-                  connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 
-                  connectionStatus === 'checking' ? 'bg-yellow-500 animate-pulse' : 'bg-orange-500'
-                }`} />
-                <p className="text-xs text-gray-400">
-                  {!aiEnabled ? 'Basic Mode Active' :
-                   connectionStatus === 'connected' ? 'AI Powered & Connected' : 
-                   connectionStatus === 'checking' ? 'Connecting to AI...' : 'AI Enabled (Not Connected)'}
-                </p>
-              </div>
-            </div>
+            <img
+              src="/images/vedit-logo.png"
+              alt="AI Assistant"
+              className="w-8 h-8 rounded-lg"
+            />
           </div>
-          <div className="flex items-center gap-3">
-            {/* AI Toggle Button */}
-            <button
-              onClick={() => {
-                console.log('AI Toggle clicked. Current state:', aiEnabled)
-                setAiEnabled(!aiEnabled)
-                console.log('AI Toggle new state:', !aiEnabled)
-                if (!aiEnabled) {
-                  toast.success('AI enabled! Connecting to advanced features...')
-                } else {
-                  toast.success('AI disabled. Using basic mode.')
-                }
-              }}
-              disabled={isConnecting}
-              className={`relative p-3 rounded-xl transition-all duration-200 ${
-                aiEnabled 
-                  ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg shadow-green-500/25' 
-                  : 'bg-gray-600 hover:bg-gray-700'
-              } ${isConnecting ? 'opacity-50 cursor-not-allowed' : ''}`}
-              title={aiEnabled ? 'Click to disable AI (use basic mode)' : 'Click to enable AI (use advanced features)'}
-            >
-              <Zap className={`w-5 h-5 ${aiEnabled ? 'text-white' : 'text-gray-400'}`} />
-              {aiEnabled && connectionStatus === 'connected' && (
-                <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse" />
-              )}
-              {isConnecting && (
-                <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-pulse" />
-              )}
-            </button>
-
-            {/* Mode Display */}
-            <div className="flex flex-col">
-              <span className={`text-sm font-bold ${
-                aiEnabled && connectionStatus === 'connected' ? 'text-green-400' : 
-                aiEnabled ? 'text-yellow-400' : 'text-gray-400'
-              }`}>
-                {!aiEnabled ? 'BASIC MODE' :
-                 connectionStatus === 'connected' ? 'AI POWERED' :
-                 connectionStatus === 'checking' ? 'CONNECTING...' : 'AI ENABLED'}
-              </span>
-              <span className={`text-xs ${
-                aiEnabled && connectionStatus === 'connected' ? 'text-green-300' : 
-                aiEnabled ? 'text-yellow-300' : 'text-gray-500'
-              }`}>
-                {!aiEnabled ? 'Simple commands only' :
-                 connectionStatus === 'connected' ? 'Advanced AI features' :
-                 connectionStatus === 'checking' ? 'Connecting to AI...' : 'AI not connected'}
-              </span>
-            </div>
-
-            {/* Reconnect Button */}
-            {aiEnabled && connectionStatus !== 'connected' && (
-              <button
-                onClick={async () => {
-                  console.log('🔄 Manual reconnect triggered')
-                  setIsConnecting(true)
-                  setConnectionStatus('checking')
-                  
-                  try {
-                    // Force a fresh connection check
-                    const isConnected = await backendAIService.forceConnectionCheck()
-                    setConnectionStatus(isConnected ? 'connected' : 'disconnected')
-                    
-                    if (isConnected) {
-                      toast.success('🤖 AI Connected! Advanced features enabled.')
-                    } else {
-                      toast.error('❌ AI connection failed. Check console for details.')
-                    }
-                  } catch (error) {
-                    console.error('❌ Manual reconnect failed:', error)
-                    setConnectionStatus('disconnected')
-                    toast.error('❌ AI connection failed. Check console for details.')
-                  } finally {
-                    setIsConnecting(false)
-                  }
-                }}
-                disabled={isConnecting}
-                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
-                title="Force reconnect to AI service"
-              >
-                {isConnecting ? 'Connecting...' : 'Reconnect'}
-              </button>
+          
+          {/* Mode Text */}
+          <div className="text-center">
+            <span className={`text-sm font-medium ${
+              aiEnabled && connectionStatus === 'connected' ? 'text-emerald-400' : 
+              aiEnabled ? 'text-yellow-400' : 'text-slate-400'
+            }`}>
+              {!aiEnabled ? 'Basic Mode' :
+               connectionStatus === 'connected' ? 'AI Powered' :
+               connectionStatus === 'checking' ? 'Connecting...' : 'AI Enabled'}
+            </span>
+          </div>
+          
+          {/* AI Toggle Button */}
+          <button
+            onClick={() => {
+              setAiEnabled(!aiEnabled)
+            }}
+            disabled={isConnecting}
+            className={`relative p-2 rounded-lg transition-all duration-300 ${
+              aiEnabled 
+                ? 'bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500' 
+                : 'bg-slate-600 hover:bg-slate-500'
+            } ${isConnecting ? 'opacity-50 cursor-not-allowed' : ''}`}
+            title={aiEnabled ? 'Disable AI' : 'Enable AI'}
+          >
+            <Zap className={`w-4 h-4 ${aiEnabled ? 'text-white' : 'text-slate-300'}`} />
+            {aiEnabled && connectionStatus === 'connected' && (
+              <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
             )}
-
-            {/* Debug Button */}
-            <button
-              onClick={async () => {
-                console.log('🔍 Debug button clicked')
-                await backendAIService.debugConnection()
-                toast('🔍 Check console for detailed debug info')
-              }}
-              className="px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-lg transition-colors"
-              title="Debug AI connection - Check console for details"
-            >
-              Debug
-            </button>
-
-            {/* Connection Status Indicator */}
-            <div className="flex items-center gap-1 text-xs">
-              <div className={`w-2 h-2 rounded-full ${
-                !aiEnabled ? 'bg-gray-500' :
-                connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 
-                connectionStatus === 'checking' ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'
-              }`} />
-              <span className={`${
-                !aiEnabled ? 'text-gray-400' :
-                connectionStatus === 'connected' ? 'text-green-400' : 
-                connectionStatus === 'checking' ? 'text-yellow-400' : 'text-red-400'
-              }`}>
-                {!aiEnabled ? 'OFF' :
-                 connectionStatus === 'connected' ? 'ONLINE' :
-                 connectionStatus === 'checking' ? 'CONNECTING' : 'OFFLINE'}
-              </span>
-            </div>
-          </div>
+          </button>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 custom-scrollbar" style={{ minHeight: 0 }}>
+      <div className="relative flex-1 overflow-y-auto px-4 py-4 space-y-4 custom-scrollbar" style={{ minHeight: 0 }}>
         {messages.map((message) => (
           <motion.div
             key={message.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
             className={`flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'} ${
               message.type === 'system' ? 'justify-center' : ''
             }`}
           >
             {message.type === 'system' ? (
-              <div className="px-3 py-1.5 bg-gray-700/50 text-gray-300 rounded-full text-xs text-center">
+              <div className="px-4 py-2 bg-slate-700/40 text-slate-300 rounded-2xl text-xs text-center backdrop-blur-sm border border-slate-600/30">
                 {message.content}
               </div>
             ) : (
               <>
                 {message.type === 'assistant' && (
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 p-0.5 flex-shrink-0">
-                    <div className="w-full h-full rounded-xl bg-gray-800 flex items-center justify-center">
-                      <Bot className="w-4 h-4 text-white" />
-                    </div>
-                  </div>
+                  <img
+                    src="/images/vedit-logo.png"
+                    alt="AI Assistant"
+                    className="w-6 h-6 rounded-lg object-cover flex-shrink-0"
+                  />
                 )}
                 <div
-                  className={`max-w-[75%] rounded-xl shadow-lg ${
+                  className={`max-w-[95%] rounded-2xl shadow-xl backdrop-blur-sm ${
                     message.type === 'user'
-                      ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white'
-                      : 'bg-gray-800 text-gray-100 border border-gray-700/50'
+                      ? 'bg-gradient-to-br from-blue-600 to-indigo-700 text-white border border-blue-500/20'
+                      : 'bg-slate-800/80 text-slate-100 border border-slate-700/50'
                   }`}
                 >
-                  <div className="px-4 py-2.5">
+                  <div className="px-3 py-2">
                     <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                    <p className={`text-xs mt-1.5 ${message.type === 'user' ? 'text-blue-200' : 'text-gray-500'}`}>
+                    <p className={`text-xs mt-2 font-medium ${
+                      message.type === 'user' ? 'text-blue-200/80' : 'text-slate-400'
+                    }`}>
                       {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 </div>
                 {message.type === 'user' && (
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center flex-shrink-0">
-                    <User className="w-4 h-4 text-white" />
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <User className="w-5 h-5 text-white" />
                   </div>
                 )}
               </>
@@ -2421,16 +2358,16 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
         ))}
         {isProcessing && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             className="flex gap-3 justify-start"
           >
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 p-0.5 flex-shrink-0">
-              <div className="w-full h-full rounded-xl bg-gray-800 flex items-center justify-center">
-                <Loader2 className="w-4 h-4 text-white animate-spin" />
-              </div>
-            </div>
-            <div className="px-4 py-2.5 bg-gray-800 text-gray-100 rounded-xl border border-gray-700/50">
+            <img
+              src="/images/vedit-logo.png"
+              alt="AI Assistant"
+              className="w-6 h-6 rounded-lg object-cover flex-shrink-0"
+            />
+            <div className="px-3 py-2 bg-slate-800/80 text-slate-100 rounded-2xl border border-slate-700/50 backdrop-blur-sm shadow-xl max-w-[95%]">
               <p className="text-sm">Processing your command...</p>
             </div>
           </motion.div>
@@ -2439,18 +2376,18 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
       </div>
 
       {/* Input Area */}
-      <div className="flex-shrink-0 p-4 border-t border-gray-700/50 bg-gray-800/50">
+      <div className="relative flex-shrink-0 px-3 py-2 border-t border-slate-600/40 bg-gradient-to-r from-slate-800/90 to-slate-700/90 backdrop-blur-md shadow-lg">
         <div className="flex gap-2">
           <button
             onClick={toggleListening}
             disabled={isProcessing}
-            className={`px-4 py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center ${
+            className={`px-2 py-2 rounded-lg transition-all duration-300 flex items-center justify-center ${
               isListening
-                ? 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white'
-                : 'bg-gradient-to-r from-gray-700 to-gray-600 hover:from-gray-600 hover:to-gray-500 text-white'
+                ? 'bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 text-white'
+                : 'bg-slate-600 hover:bg-slate-500 text-slate-200'
             } disabled:opacity-50 disabled:cursor-not-allowed`}
           >
-            {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </button>
           <div className="flex-1 relative">
             <input
@@ -2465,15 +2402,15 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
                 "⚡ Basic Mode (AI not connected): Try 'make video brighter' or 'play video'"
               }
               disabled={isProcessing}
-              className="w-full px-4 py-2.5 bg-gray-700 text-white rounded-xl border border-gray-600 focus:border-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 bg-slate-700/80 text-white rounded-lg border border-slate-600/50 focus:border-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm placeholder-slate-400"
             />
           </div>
           <button
             onClick={() => handleSubmit()}
             disabled={!inputValue.trim() || isProcessing}
-            className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            className="px-2 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           >
-            {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>
         </div>
       </div>

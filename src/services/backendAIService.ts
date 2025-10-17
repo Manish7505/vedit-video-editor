@@ -1,5 +1,6 @@
 // Backend AI Service - Handles communication with the backend OpenRouter API
-import axios from 'axios';
+import axios from 'axios'
+import { logger } from '../utils/logger';
 
 // Force the correct API URL to fix port mismatch issue
 const API_URL = 'http://localhost:8080/api';
@@ -38,15 +39,15 @@ class BackendAIService {
 
   constructor() {
     this.baseUrl = API_URL;
-    console.log('🚀 BackendAIService initialized');
-    console.log('📍 Base URL:', this.baseUrl);
-    console.log('🌍 Environment VITE_API_URL:', import.meta.env.VITE_API_URL);
-    console.log('🔧 Hardcoded API_URL:', API_URL);
-    console.log('🎯 Full status URL:', `${this.baseUrl}/ai/status`);
+    logger.info('🚀 BackendAIService initialized');
+    logger.debug('📍 Base URL:', this.baseUrl);
+    logger.debug('🌍 Environment VITE_API_URL:', import.meta.env.VITE_API_URL);
+    logger.debug('🔧 Hardcoded API_URL:', API_URL);
+    logger.debug('🎯 Full status URL:', `${this.baseUrl}/ai/status`);
     
     // Test connection immediately
     this.testConnection().then(connected => {
-      console.log('🔗 Initial connection test:', connected ? 'SUCCESS' : 'FAILED');
+      logger.info('🔗 Initial connection test:', connected ? 'SUCCESS' : 'FAILED');
     });
   }
 
@@ -64,12 +65,12 @@ class BackendAIService {
         return this.isConnected;
       }
 
-      console.log('🔍 Checking AI availability...');
+      logger.debug('🔍 Checking AI availability...');
       const isConnected = await this.testConnection();
       this.isConnected = isConnected;
       this.lastConnectionCheck = now;
       
-      console.log('📊 AI availability check result:', isConnected ? 'CONNECTED' : 'DISCONNECTED');
+      logger.debug('📊 AI availability check result:', isConnected ? 'CONNECTED' : 'DISCONNECTED');
       return isConnected;
     } catch (error) {
       console.error('❌ AI service availability check failed:', error);
@@ -81,11 +82,11 @@ class BackendAIService {
 
   async testConnection(): Promise<boolean> {
     try {
-      console.log('🧪 Testing AI connection...');
-      console.log('🎯 Target URL:', `${this.baseUrl}/ai/status`);
+      logger.debug('🧪 Testing AI connection...');
+      logger.debug('🎯 Target URL:', `${this.baseUrl}/ai/status`);
       
       this.connectionAttempts++;
-      console.log(`📈 Connection attempt ${this.connectionAttempts}/${this.maxConnectionAttempts}`);
+      logger.debug(`📈 Connection attempt ${this.connectionAttempts}/${this.maxConnectionAttempts}`);
       
       // Create a timeout promise
       const timeoutPromise = new Promise<never>((_, reject) => {
@@ -106,7 +107,7 @@ class BackendAIService {
       // Race between fetch and timeout
       const response = await Promise.race([fetchPromise, timeoutPromise]);
       
-      console.log('📡 Response received:', {
+      logger.debug('📡 Response received:', {
         status: response.status,
         statusText: response.statusText,
         ok: response.ok,
@@ -114,15 +115,15 @@ class BackendAIService {
       });
       
       if (!response.ok) {
-        console.log('❌ Response not OK:', response.status, response.statusText);
+        logger.error('❌ Response not OK:', response.status, response.statusText);
         return false;
       }
       
       const data = await response.json();
-      console.log('📦 Response data:', data);
+      logger.debug('📦 Response data:', data);
       
       const isConnected = data.success && data.data?.available;
-      console.log('✅ Connection test result:', isConnected ? 'SUCCESS' : 'FAILED');
+      logger.info('✅ Connection test result:', isConnected ? 'SUCCESS' : 'FAILED');
       
       if (isConnected) {
         this.connectionAttempts = 0; // Reset on success
@@ -133,7 +134,7 @@ class BackendAIService {
       console.error('❌ Connection test failed:', error);
       
       if (this.connectionAttempts >= this.maxConnectionAttempts) {
-        console.log('🔄 Max connection attempts reached, resetting counter');
+        logger.warn('🔄 Max connection attempts reached, resetting counter');
         this.connectionAttempts = 0;
       }
       
@@ -143,7 +144,7 @@ class BackendAIService {
 
   async chat(message: string): Promise<BackendAIResponse> {
     try {
-      console.log('💬 Sending chat message to backend:', message);
+      logger.debug('💬 Sending chat message to backend:', message);
       const response = await axios.post(`${this.baseUrl}/ai/chat`, { 
         message 
       }, {
@@ -153,7 +154,7 @@ class BackendAIService {
         }
       });
       
-      console.log('💬 Chat response received:', response.data);
+      logger.debug('💬 Chat response received:', response.data);
       return response.data.data;
     } catch (error: any) {
       console.error('❌ Backend AI chat failed:', error);
@@ -163,8 +164,8 @@ class BackendAIService {
 
   async analyzeVideoCommand(command: string, videoContext: VideoContext): Promise<BackendAIResponse> {
     try {
-      console.log('🎬 Analyzing video command:', command);
-      console.log('📊 Video context:', videoContext);
+      logger.debug('🎬 Analyzing video command:', command);
+      logger.debug('📊 Video context:', videoContext);
       
       const response = await axios.post(`${this.baseUrl}/ai/execute-command`, { 
         command, 
@@ -176,7 +177,7 @@ class BackendAIService {
         }
       });
       
-      console.log('🎬 Command analysis response:', response.data);
+      logger.debug('🎬 Command analysis response:', response.data);
       return response.data.data;
     } catch (error: any) {
       console.error('❌ Backend AI command execution failed:', error);
@@ -186,7 +187,7 @@ class BackendAIService {
 
   async getSuggestions(prompt: string, videoContext: VideoContext): Promise<BackendAIResponse> {
     try {
-      console.log('💡 Getting AI suggestions for:', prompt);
+      logger.debug('💡 Getting AI suggestions for:', prompt);
       const response = await axios.post(`${this.baseUrl}/ai/suggestions`, { 
         prompt, 
         videoContext 
@@ -197,7 +198,7 @@ class BackendAIService {
         }
       });
       
-      console.log('💡 Suggestions response:', response.data);
+      logger.debug('💡 Suggestions response:', response.data);
       return response.data.data;
     } catch (error: any) {
       console.error('❌ Backend AI suggestions failed:', error);
@@ -212,40 +213,42 @@ class BackendAIService {
 
   // Force connection check
   async forceConnectionCheck(): Promise<boolean> {
-    console.log('🔄 Forcing connection check...');
+    logger.debug('🔄 Forcing connection check...');
     this.lastConnectionCheck = 0; // Reset to force immediate check
     this.connectionAttempts = 0; // Reset attempts
     return await this.isAvailableAsync();
   }
 
-  // Debug connection method
+  // Debug connection method (development only)
   async debugConnection(): Promise<void> {
-    console.log('🔍 === AI Connection Debug ===');
-    console.log('📍 Base URL:', this.baseUrl);
-    console.log('🎯 Full URL:', `${this.baseUrl}/ai/status`);
-    console.log('🔗 Current connection status:', this.isConnected);
-    console.log('⏰ Last check time:', new Date(this.lastConnectionCheck).toISOString());
-    console.log('📊 Connection attempts:', this.connectionAttempts);
-    console.log('🌍 Environment:', {
-      VITE_API_URL: import.meta.env.VITE_API_URL,
-      NODE_ENV: import.meta.env.NODE_ENV,
-      MODE: import.meta.env.MODE
-    });
-    
-    try {
-      console.log('🧪 Running connection test...');
-      const result = await this.testConnection();
-      console.log('✅ Test connection result:', result);
+    if (import.meta.env.DEV) {
+      logger.debug('🔍 === AI Connection Debug ===');
+      logger.debug('📍 Base URL:', this.baseUrl);
+      logger.debug('🎯 Full URL:', `${this.baseUrl}/ai/status`);
+      logger.debug('🔗 Current connection status:', this.isConnected);
+      logger.debug('⏰ Last check time:', new Date(this.lastConnectionCheck).toISOString());
+      logger.debug('📊 Connection attempts:', this.connectionAttempts);
+      logger.debug('🌍 Environment:', {
+        VITE_API_URL: import.meta.env.VITE_API_URL,
+        NODE_ENV: import.meta.env.NODE_ENV,
+        MODE: import.meta.env.MODE
+      });
       
-      if (result) {
-        console.log('🎉 AI service is working correctly!');
-      } else {
-        console.log('❌ AI service connection failed');
+      try {
+        logger.debug('🧪 Running connection test...');
+        const result = await this.testConnection();
+        logger.debug('✅ Test connection result:', result);
+        
+        if (result) {
+          logger.info('🎉 AI service is working correctly!');
+        } else {
+          logger.error('❌ AI service connection failed');
+        }
+      } catch (error) {
+        console.error('❌ Debug connection error:', error);
       }
-    } catch (error) {
-      console.error('❌ Debug connection error:', error);
+      logger.debug('🔍 === End Debug ===');
     }
-    console.log('🔍 === End Debug ===');
   }
 
   // Get service info

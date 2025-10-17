@@ -339,7 +339,7 @@ const VideoEditor = () => {
     const hasAudio = currentClips.find(clip => clip.type === 'audio')
     
     if (!hasVideo && !hasAudio) {
-      console.log('No media loaded. Please upload video or audio first.')
+      // No media loaded
       return
     }
     
@@ -355,10 +355,20 @@ const VideoEditor = () => {
           if (audioRef.current) await audioRef.current.play()
           setIsPlaying(true)
         }
-      } catch (error) {
-        console.error('Error toggling video playback:', error)
-        setIsPlaying(false)
-      }
+        } catch (error) {
+          // Handle specific error types
+          if (error instanceof Error) {
+            if (error.name === 'AbortError') {
+              // Media was removed from document - this is normal during cleanup
+              // Video playback interrupted
+            } else {
+              console.error('Error toggling video playback:', error)
+            }
+          } else {
+            console.error('Error toggling video playback:', error)
+          }
+          setIsPlaying(false)
+        }
     }
     // If we only have audio, use audio controls
     else if (hasAudio && audioRef.current) {
@@ -370,15 +380,25 @@ const VideoEditor = () => {
           await audioRef.current.play()
           setIsPlaying(true)
         }
-      } catch (error) {
-        console.error('Error toggling audio playback:', error)
-        setIsPlaying(false)
-      }
+        } catch (error) {
+          // Handle specific error types
+          if (error instanceof Error) {
+            if (error.name === 'AbortError') {
+              // Media was removed from document - this is normal during cleanup
+              // Audio playback interrupted
+            } else {
+              console.error('Error toggling audio playback:', error)
+            }
+          } else {
+            console.error('Error toggling audio playback:', error)
+          }
+          setIsPlaying(false)
+        }
     }
     // Fallback: toggle state for UI feedback
     else {
       setIsPlaying(!isPlaying)
-      console.log('Playback state toggled:', !isPlaying ? 'Playing' : 'Paused')
+      // Playback state toggled
     }
   }
 
@@ -542,7 +562,7 @@ const VideoEditor = () => {
           if (!e.ctrlKey && !e.metaKey) {
             e.preventDefault()
             localStorage.setItem('vedit-project-name', projectName)
-            console.log('Project saved:', projectName)
+            // Project saved
             break
           }
           break
@@ -1193,6 +1213,7 @@ const VideoEditor = () => {
     }
   ]
 
+
   // Waveform component
   const Waveform = ({ width, height, waveform }: { width: number; height: number; waveform?: number[] }) => {
     const samples = waveform || generateWaveform(width / pixelsPerSecond)
@@ -1325,7 +1346,7 @@ const VideoEditor = () => {
             onClick={() => {
               // Save project name to localStorage
               localStorage.setItem('vedit-project-name', projectName)
-              console.log('Project saved:', projectName)
+              // Project saved
             }}
             className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
             title="Save Project (Ctrl+S)"
@@ -1445,10 +1466,10 @@ const VideoEditor = () => {
                             onClick={() => {
                               if (activeEffects.includes(effect.name)) {
                                 setActiveEffects(activeEffects.filter(e => e !== effect.name))
-                                console.log('Removed effect:', effect.name)
+                                // Removed effect
                               } else {
                                 setActiveEffects([...activeEffects, effect.name])
-                                console.log('Applied effect:', effect.name)
+                                // Applied effect
                               }
                             }}
                             className={`w-full p-3 rounded-lg text-left text-sm transition-all duration-200 ${
@@ -1687,7 +1708,7 @@ const VideoEditor = () => {
                                 // Move playhead to the end of this audio
                                 setCurrentTime(startTime + duration)
                                 
-                                console.log('Added sample audio:', audio.name, 'Duration:', duration + 's', 'Start:', startTime + 's')
+                                // Added sample audio
                               } catch (error) {
                                 console.error('Error creating audio:', error)
                                 // Fallback to mock audio

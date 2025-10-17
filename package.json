@@ -12,6 +12,8 @@
     "build:server": "cd server && npm install",
     "build:full": "npm run build:frontend && npm run build:server",
     "start": "node start-server.cjs",
+    "start:localhost": "npm run build && node start-localhost.cjs",
+    "start:railway": "npm run build && node start-railway-fixed.cjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },

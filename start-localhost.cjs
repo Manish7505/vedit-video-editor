@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
-// Fixed Railway start script - no wildcard routes
-// This script avoids the path-to-regexp error completely
+// Local development start script - runs on localhost
+// This script is optimized for local development
 
 const express = require('express');
 const path = require('path');
 
-console.log('🚀 Starting VEdit Railway Fixed Server...');
+console.log('🚀 Starting VEdit Local Development Server...');
 console.log('📁 Working directory:', process.cwd());
-console.log('🌍 Environment:', process.env.NODE_ENV || 'production');
+console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
 console.log('🔌 Port:', process.env.PORT || '8080');
 
 const app = express();
@@ -18,7 +18,7 @@ const PORT = process.env.PORT || 8080;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// CORS
+// CORS for local development
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -33,19 +33,19 @@ app.use((req, res, next) => {
 // Serve static files from dist
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// CRITICAL: Root health check endpoint for Railway
+// Health check endpoints
 app.get('/', (req, res) => {
   console.log('✅ Health check requested at root');
   res.status(200).json({ 
     status: 'OK', 
-    message: 'VEdit is running',
+    message: 'VEdit Local Development Server is running',
     timestamp: new Date().toISOString(),
     port: PORT,
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    environment: 'development'
   });
 });
 
-// Additional health check endpoints
 app.get('/health', (req, res) => {
   console.log('✅ Health check requested at /health');
   res.status(200).json({ 
@@ -98,7 +98,7 @@ try {
   });
 }
 
-// Specific routes for common paths (avoid wildcard)
+// Specific routes for common paths
 app.get('/video-editor', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
@@ -129,24 +129,25 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// Start server
-const server = app.listen(PORT, '0.0.0.0', (err) => {
+// Start server on localhost
+const server = app.listen(PORT, 'localhost', (err) => {
   if (err) {
     console.error('❌ Failed to start server:', err);
     process.exit(1);
   }
   
-  console.log(`✅ Server started successfully on port ${PORT}`);
+  console.log(`✅ Local Development Server started successfully on localhost:${PORT}`);
   console.log(`🌐 Frontend served from /dist`);
-  console.log(`🔗 Health check at /`);
-  console.log(`❤️ API health check at /api/health`);
+  console.log(`🔗 Health check at http://localhost:${PORT}/`);
+  console.log(`❤️ API health check at http://localhost:${PORT}/api/health`);
+  console.log(`🎯 Open your browser to: http://localhost:${PORT}`);
   
   // Test health check immediately
   setTimeout(() => {
     console.log('🧪 Testing health check...');
     const http = require('http');
     const options = {
-      hostname: '0.0.0.0',
+      hostname: 'localhost',
       port: PORT,
       path: '/',
       method: 'GET'

@@ -5,12 +5,13 @@
 
 const express = require('express');
 const path = require('path');
-const { spawn } = require('child_process');
+require('dotenv').config();
 
 console.log('🚀 Starting VEdit Full Stack Application...');
 console.log('📁 Working directory:', process.cwd());
 console.log('🌍 Environment:', process.env.NODE_ENV || 'production');
 console.log('🔌 Port:', process.env.PORT || '8080');
+console.log('🔑 OpenRouter API Key:', process.env.OPENROUTER_API_KEY ? 'SET' : 'NOT SET');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -63,20 +64,36 @@ app.get('*', (req, res) => {
 app.use(errorHandler);
 
 // Start the server
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`🌐 Frontend served from /dist`);
   console.log(`🔗 API available at /api/*`);
   console.log(`❤️ Health check at /api/health`);
+  console.log(`🔑 OpenRouter API Key: ${process.env.OPENROUTER_API_KEY ? 'CONFIGURED' : 'MISSING'}`);
+});
+
+// Handle server errors
+server.on('error', (error) => {
+  console.error('❌ Server error:', error);
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use`);
+  }
+  process.exit(1);
 });
 
 // Handle graceful shutdown
 process.on('SIGTERM', () => {
   console.log('🛑 Received SIGTERM, shutting down gracefully...');
-  process.exit(0);
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
 });
 
 process.on('SIGINT', () => {
   console.log('🛑 Received SIGINT, shutting down gracefully...');
-  process.exit(0);
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
 });

@@ -2,6 +2,7 @@
   "name": "vedit-ai-platform",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "dev:server": "cd server && npm run dev",

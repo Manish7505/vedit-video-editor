@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "npm run build:production && node start-railway-fixed.cjs",
+    "startCommand": "npm ci --omit=dev --no-audit && npm run build:frontend && npm run build:server && node start-railway-fixed.cjs",
     "healthcheckPath": "/",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",

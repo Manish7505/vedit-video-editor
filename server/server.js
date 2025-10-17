@@ -185,7 +185,7 @@ server.listen(PORT, '0.0.0.0', (err) => {
   }
   
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📱 Frontend URL: ${process.env.FRONTEND_URL || "http://localhost:3003"}`);
+  console.log(`📱 Frontend URL: ${process.env.FRONTEND_URL || "http://localhost:3000"}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Health check available at: http://0.0.0.0:${PORT}/api/health`);
   console.log(`🌐 Public URL should be accessible via Railway domain`);

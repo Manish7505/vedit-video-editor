@@ -1,5 +1,8 @@
-# Use Node.js 22.12.0 specifically
-FROM node:22.12.0-alpine
+# Use Node.js 18 LTS
+FROM node:18-alpine
+
+# Install curl for health checks
+RUN apk add --no-cache curl
 
 # Set working directory
 WORKDIR /app
@@ -8,18 +11,28 @@ WORKDIR /app
 COPY package*.json ./
 COPY server/package*.json ./server/
 
-# Install dependencies
-RUN npm ci --omit=dev
-RUN cd server && npm ci --omit=dev
+# Install ALL dependencies (including dev dependencies for build)
+RUN npm install
+RUN cd server && npm install
 
 # Copy source code
 COPY . .
 
-# Build the application
-RUN npm run build
+# Build frontend (vite is now available)
+RUN npm run build:frontend
+
+# Server dependencies already installed above
 
 # Expose port
-EXPOSE 3000
+EXPOSE 8080
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8080/ || exit 1
 
 # Start the application
 CMD ["node", "start-railway-fixed.cjs"]

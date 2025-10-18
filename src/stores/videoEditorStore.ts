@@ -234,7 +234,13 @@ export const useVideoEditorStore = create<VideoEditorState>((set) => ({
     blur: 0,
     sharpen: 0,
     filmGrain: 0,
-    vignette: 0
+    vignette: 0,
+    sepia: 0,
+    grayscale: 0,
+    invert: 0,
+    vintage: 0,
+    warm: 0,
+    cool: 0
   },
   setAdjustments: (adjustments) => {
     set({ adjustments })

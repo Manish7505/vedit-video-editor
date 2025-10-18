@@ -7,8 +7,7 @@ import {
   PhoneOff,
   AlertCircle,
   VolumeX,
-  User,
-  Send
+  User
 } from 'lucide-react'
 import { useVideoEditor } from '../contexts/VideoEditorContext'
 import { vapiSessionManager } from '../services/vapiSessionManager'
@@ -34,15 +33,33 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
   const [isMuted, setIsMuted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [statusMessage, setStatusMessage] = useState('Ready to edit!')
+  const [statusMessage, setStatusMessage] = useState('Ready to help!')
   const [isInitialized, setIsInitialized] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isListening, setIsListening] = useState(false)
-  const [textInput, setTextInput] = useState('')
   
   const vapiRef = useRef<any>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
+
+  // Prevent audio feedback by setting proper audio routing
+  const preventAudioFeedback = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 16000,
+          channelCount: 1
+        }
+      })
+      stream.getTracks().forEach(track => track.stop())
+      logger.debug('✅ [VideoEditor] Audio feedback prevention configured')
+    } catch (err) {
+      logger.error('Error configuring audio feedback prevention (video editor):', err)
+    }
+  }
 
   // Get video editor context (direct subscription)
   const {
@@ -57,7 +74,17 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
     removeClip,
     setPlaybackRate,
     setZoom,
-    zoom
+    zoom,
+    canUndo,
+    canRedo,
+    undo,
+    redo,
+    adjustments,
+    setAdjustments,
+    activeFilters,
+    setActiveFilters,
+    activeEffects,
+    setActiveEffects
   } = useVideoEditor()
 
   // Ensure a target clip is always selected when clips are present
@@ -66,6 +93,31 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
       setSelectedClipId(clips[0].id)
     }
   }, [clips, selectedClipId, setSelectedClipId])
+
+  // Debug clips changes
+  useEffect(() => {
+    logger.debug('🎬 VAPI Assistant - Clips changed:', {
+      clipsLength: clips.length,
+      clips: clips.map(c => ({ id: c.id, name: c.name, type: c.type, url: c.url })),
+      selectedClipId,
+      timestamp: new Date().toISOString()
+    })
+    
+    // Force a re-render if clips are available but not detected
+    if (clips.length > 0) {
+      logger.debug('🎬 VAPI Assistant - Clips are available, should work now!')
+    }
+  }, [clips, selectedClipId])
+
+  // Debug adjustments changes
+  useEffect(() => {
+    logger.debug('🎬 VAPI Assistant - Adjustments changed:', {
+      adjustments,
+      activeFilters,
+      activeEffects,
+      timestamp: new Date().toISOString()
+    })
+  }, [adjustments, activeFilters, activeEffects])
 
   // Get configuration from environment or props
   const publicKey =
@@ -94,390 +146,682 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
     setMessages(prev => [...prev, newMessage])
   }
 
-  // Process video editing commands
+  // Process video editing commands - GUIDANCE ONLY
   const processCommand = async (command: string): Promise<string> => {
     const lowerCommand = command.toLowerCase()
+    logger.debug('🎬 Processing command:', command)
 
-    // Get selected clip or first clip
-    const targetClip = selectedClipId 
-      ? clips.find(c => c.id === selectedClipId)
-      : clips[0]
+    // Check for direct action requests - apologize and guide instead
+    const directActionKeywords = [
+      'make', 'change', 'adjust', 'set', 'apply', 'add', 'remove', 'delete', 
+      'cut', 'split', 'move', 'resize', 'crop', 'rotate', 'flip', 'zoom',
+      'increase', 'decrease', 'brighten', 'darken', 'contrast', 'saturation',
+      'play', 'pause', 'stop', 'mute', 'unmute', 'export', 'render', 'download'
+    ]
 
-    if (!targetClip && !lowerCommand.includes('add') && !lowerCommand.includes('create') && !lowerCommand.includes('play') && !lowerCommand.includes('pause') && !lowerCommand.includes('zoom')) {
-      return 'Please select a clip first or upload a video to get started.'
+    const isDirectAction = directActionKeywords.some(keyword => 
+      lowerCommand.includes(keyword) && (
+        lowerCommand.includes('brightness') || 
+        lowerCommand.includes('contrast') || 
+        lowerCommand.includes('saturation') ||
+        lowerCommand.includes('volume') ||
+        lowerCommand.includes('speed') ||
+        lowerCommand.includes('filter') ||
+        lowerCommand.includes('effect') ||
+        lowerCommand.includes('video') ||
+        lowerCommand.includes('clip') ||
+        lowerCommand.includes('audio')
+      )
+    )
+
+    if (isDirectAction) {
+      return `I apologize, but I can't make direct changes to your video. I'm here to guide you through the process! 
+
+Here's how you can ${lowerCommand.includes('brightness') ? 'adjust brightness' : 
+                    lowerCommand.includes('contrast') ? 'adjust contrast' :
+                    lowerCommand.includes('saturation') ? 'adjust saturation' :
+                    lowerCommand.includes('volume') ? 'change volume' :
+                    lowerCommand.includes('speed') ? 'change playback speed' :
+                    lowerCommand.includes('filter') ? 'apply filters' :
+                    lowerCommand.includes('play') ? 'control playback' :
+                    'make that change'}:
+
+1. Look for the ${lowerCommand.includes('brightness') ? 'brightness slider' : 
+                    lowerCommand.includes('contrast') ? 'contrast slider' :
+                    lowerCommand.includes('saturation') ? 'saturation slider' :
+                    lowerCommand.includes('volume') ? 'volume control' :
+                    lowerCommand.includes('speed') ? 'playback speed control' :
+                    lowerCommand.includes('filter') ? 'filters panel' :
+                    'playback controls'} in the interface
+2. Use the controls to make your desired adjustment
+3. You can also use keyboard shortcuts for quick access
+
+Would you like me to explain more about any specific editing feature?`
     }
 
-    // BRIGHTNESS COMMANDS
+    // BRIGHTNESS GUIDANCE
     if (lowerCommand.includes('brightness') || lowerCommand.includes('brighter') || lowerCommand.includes('darker')) {
-      if (!targetClip) return 'No clip selected to adjust brightness'
-      
-      const match = lowerCommand.match(/(\d+)/)
-      const value = match ? parseInt(match[0]) : 20
-      
-      if (lowerCommand.includes('increase') || lowerCommand.includes('brighter') || lowerCommand.includes('brighten')) {
-        const currentFilters = (targetClip as any).filters || {}
-        const currentBrightness = currentFilters.brightness || 100
-        const newBrightness = Math.min(200, currentBrightness + value)
-        
-        updateClip(targetClip.id, {
-          ...targetClip,
-          filters: { ...currentFilters, brightness: newBrightness }
-        } as any)
-        
-        const videoElement = document.querySelector(`[data-clip-id="${targetClip.id}"] video`) as HTMLVideoElement
-        if (videoElement) {
-          videoElement.style.filter = `brightness(${newBrightness}%)`
-        }
-        
-        toast.success(`✅ Brightness increased to ${newBrightness}%`)
-        return `✅ Increased brightness to ${newBrightness}% for "${targetClip.name}"`
-      } else if (lowerCommand.includes('decrease') || lowerCommand.includes('darker') || lowerCommand.includes('darken')) {
-        const currentFilters = (targetClip as any).filters || {}
-        const currentBrightness = currentFilters.brightness || 100
-        const newBrightness = Math.max(0, currentBrightness - value)
-        
-        updateClip(targetClip.id, {
-          ...targetClip,
-          filters: { ...currentFilters, brightness: newBrightness }
-        } as any)
-        
-        const videoElement = document.querySelector(`[data-clip-id="${targetClip.id}"] video`) as HTMLVideoElement
-        if (videoElement) {
-          videoElement.style.filter = `brightness(${newBrightness}%)`
-        }
-        
-        toast.success(`✅ Brightness decreased to ${newBrightness}%`)
-        return `✅ Decreased brightness to ${newBrightness}% for "${targetClip.name}"`
-      }
+      return `I can guide you on adjusting brightness! Here's how:
+
+**To adjust brightness:**
+1. Look for the "Adjustments" panel on the right side
+2. Find the "Brightness" slider
+3. Move it right to make the video brighter, left to make it darker
+4. You can also use the keyboard shortcut Ctrl+B to open adjustments
+
+**Pro tip:** Start with small adjustments (10-20%) and see how it looks. Too much brightness can wash out details!
+
+Would you like me to explain contrast or saturation adjustments as well?`
     }
 
-    // CONTRAST COMMANDS
+    // CONTRAST GUIDANCE
     if (lowerCommand.includes('contrast')) {
-      if (!targetClip) return 'No clip selected to adjust contrast'
-      
-      const match = lowerCommand.match(/(\d+)/)
-      const value = match ? parseInt(match[0]) : 15
-      
-      if (lowerCommand.includes('increase') || lowerCommand.includes('more')) {
-        const currentFilters = (targetClip as any).filters || {}
-        const currentContrast = currentFilters.contrast || 100
-        const newContrast = Math.min(200, currentContrast + value)
-        
-        updateClip(targetClip.id, {
-          ...targetClip,
-          filters: { ...currentFilters, contrast: newContrast }
-        } as any)
-        
-        const videoElement = document.querySelector(`[data-clip-id="${targetClip.id}"] video`) as HTMLVideoElement
-        if (videoElement) {
-          const brightness = (currentFilters.brightness || 100)
-          const saturation = (currentFilters.saturation || 100)
-          videoElement.style.filter = `brightness(${brightness}%) contrast(${newContrast}%) saturate(${saturation}%)`
-        }
-        
-        toast.success(`✅ Contrast increased to ${newContrast}%`)
-        return `✅ Increased contrast to ${newContrast}% for "${targetClip.name}"`
-      } else if (lowerCommand.includes('decrease') || lowerCommand.includes('less')) {
-        const currentFilters = (targetClip as any).filters || {}
-        const currentContrast = currentFilters.contrast || 100
-        const newContrast = Math.max(0, currentContrast - value)
-        
-        updateClip(targetClip.id, {
-          ...targetClip,
-          filters: { ...currentFilters, contrast: newContrast }
-        } as any)
-        
-        const videoElement = document.querySelector(`[data-clip-id="${targetClip.id}"] video`) as HTMLVideoElement
-        if (videoElement) {
-          const brightness = (currentFilters.brightness || 100)
-          const saturation = (currentFilters.saturation || 100)
-          videoElement.style.filter = `brightness(${brightness}%) contrast(${newContrast}%) saturate(${saturation}%)`
-        }
-        
-        toast.success(`✅ Contrast decreased to ${newContrast}%`)
-        return `✅ Decreased contrast to ${newContrast}% for "${targetClip.name}"`
-      }
+      return `I can help you understand contrast adjustments! Here's how:
+
+**To adjust contrast:**
+1. Go to the "Adjustments" panel on the right side
+2. Find the "Contrast" slider
+3. Move it right to increase contrast (makes darks darker, lights lighter)
+4. Move it left to decrease contrast (makes everything more similar)
+
+**When to use contrast:**
+- Increase contrast to make your video more dramatic and punchy
+- Decrease contrast for a softer, more muted look
+- Good contrast makes your subject stand out from the background
+
+**Pro tip:** Adjust contrast after brightness for best results!
+
+Would you like me to explain saturation or other adjustments?`
     }
 
-    // SATURATION COMMANDS
+    // SATURATION GUIDANCE
     if (lowerCommand.includes('saturation') || lowerCommand.includes('colorful') || lowerCommand.includes('vibrant')) {
-      if (!targetClip) return 'No clip selected to adjust saturation'
-      
-      const match = lowerCommand.match(/(\d+)/)
-      const value = match ? parseInt(match[0]) : 15
-      
-      if (lowerCommand.includes('increase') || lowerCommand.includes('more')) {
-        const currentFilters = (targetClip as any).filters || {}
-        const currentSaturation = currentFilters.saturation || 100
-        const newSaturation = Math.min(200, currentSaturation + value)
-        
-        updateClip(targetClip.id, {
-          ...targetClip,
-          filters: { ...currentFilters, saturation: newSaturation }
-        } as any)
-        
-        const videoElement = document.querySelector(`[data-clip-id="${targetClip.id}"] video`) as HTMLVideoElement
-        if (videoElement) {
-          const brightness = (currentFilters.brightness || 100)
-          const contrast = (currentFilters.contrast || 100)
-          videoElement.style.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${newSaturation}%)`
-        }
-        
-        toast.success(`✅ Saturation increased to ${newSaturation}%`)
-        return `✅ Increased saturation to ${newSaturation}% for "${targetClip.name}"`
-      } else if (lowerCommand.includes('decrease') || lowerCommand.includes('less')) {
-        const currentFilters = (targetClip as any).filters || {}
-        const currentSaturation = currentFilters.saturation || 100
-        const newSaturation = Math.max(0, currentSaturation - value)
-        
-        updateClip(targetClip.id, {
-          ...targetClip,
-          filters: { ...currentFilters, saturation: newSaturation }
-        } as any)
-        
-        const videoElement = document.querySelector(`[data-clip-id="${targetClip.id}"] video`) as HTMLVideoElement
-        if (videoElement) {
-          const brightness = (currentFilters.brightness || 100)
-          const contrast = (currentFilters.contrast || 100)
-          videoElement.style.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${newSaturation}%)`
-        }
-        
-        toast.success(`✅ Saturation decreased to ${newSaturation}%`)
-        return `✅ Decreased saturation to ${newSaturation}% for "${targetClip.name}"`
-      }
+      return `I can guide you on saturation adjustments! Here's how:
+
+**To adjust saturation:**
+1. Open the "Adjustments" panel on the right side
+2. Find the "Saturation" slider
+3. Move it right to make colors more vibrant and colorful
+4. Move it left to make colors more muted or even black & white
+
+**When to use saturation:**
+- Increase saturation for vibrant, eye-catching videos
+- Decrease saturation for a more professional, muted look
+- Set to -100 for black and white effect
+- Great for creating mood and atmosphere
+
+**Pro tip:** Saturation works great with contrast - try adjusting both together!
+
+Would you like me to explain filters or effects next?`
     }
 
-    // VOLUME COMMANDS
+    // VOLUME GUIDANCE
     if (lowerCommand.includes('volume')) {
-      const match = lowerCommand.match(/(\d+)/)
-      const value = match ? parseInt(match[0]) : 50
-      
-      if (lowerCommand.includes('increase') || lowerCommand.includes('up') || lowerCommand.includes('louder')) {
-        const mediaElements = document.querySelectorAll('video, audio')
-        mediaElements.forEach((element: any) => {
-          element.volume = Math.min(1, value / 100)
-        })
-        toast.success(`✅ Volume increased to ${value}%`)
-        return `✅ Increased volume to ${value}%`
-      } else if (lowerCommand.includes('decrease') || lowerCommand.includes('down') || lowerCommand.includes('lower')) {
-        const mediaElements = document.querySelectorAll('video, audio')
-        mediaElements.forEach((element: any) => {
-          element.volume = Math.min(1, value / 100)
-        })
-        toast.success(`✅ Volume decreased to ${value}%`)
-        return `✅ Decreased volume to ${value}%`
-      } else if (lowerCommand.includes('set')) {
-        const mediaElements = document.querySelectorAll('video, audio')
-        mediaElements.forEach((element: any) => {
-          element.volume = Math.min(1, value / 100)
-        })
-        toast.success(`✅ Volume set to ${value}%`)
-        return `✅ Set volume to ${value}%`
-      } else if (lowerCommand.includes('mute')) {
-        const mediaElements = document.querySelectorAll('video, audio')
-        mediaElements.forEach((element: any) => {
-          element.muted = true
-        })
-        toast.success('✅ Audio muted')
-        return `✅ Muted all audio`
-      } else if (lowerCommand.includes('unmute')) {
-        const mediaElements = document.querySelectorAll('video, audio')
-        mediaElements.forEach((element: any) => {
-          element.muted = false
-        })
-        toast.success('✅ Audio unmuted')
-        return `✅ Unmuted all audio`
-      }
+      return `I can guide you on audio controls! Here's how:
+
+**To control volume:**
+1. Look for the volume slider in the playback controls (usually at the bottom)
+2. Or find the "Audio" panel on the right side
+3. Drag the slider to adjust volume (0% = silent, 100% = full volume)
+4. Use the mute/unmute button for quick silence
+
+**Keyboard shortcuts:**
+- Space bar: Play/Pause
+- M key: Mute/Unmute
+- Up/Down arrows: Volume up/down
+
+**Pro tip:** Keep your main audio around 80-90% to leave headroom for mixing!
+
+Would you like me to explain playback controls or other features?`
     }
 
-    // SPEED/PLAYBACK RATE COMMANDS
+    // SPEED GUIDANCE
     if (lowerCommand.includes('speed') || lowerCommand.includes('slow') || lowerCommand.includes('fast')) {
-      if (lowerCommand.includes('slow')) {
-        setPlaybackRate(0.5)
-        toast.success('✅ Slowed down to 0.5x')
-        return '✅ Slowed down to 0.5x'
-      } else if (lowerCommand.includes('fast')) {
-        setPlaybackRate(2)
-        toast.success('✅ Sped up to 2x')
-        return '✅ Sped up to 2x'
-      } else {
-        const match = lowerCommand.match(/(\d+(\.\d+)?)(x)?/)
-        const speed = match ? parseFloat(match[1]) : 1
-        setPlaybackRate(speed)
-        toast.success(`✅ Speed set to ${speed}x`)
-        return `✅ Set speed to ${speed}x`
-      }
+      return `I can guide you on playback speed! Here's how:
+
+**To change playback speed:**
+1. Look for the speed control in the playback bar (usually shows "1x")
+2. Click on it to see speed options like 0.5x, 1x, 1.5x, 2x
+3. Or find the "Playback" panel on the right side
+4. Use the speed slider to set any speed between 0.25x and 4x
+
+**Common speeds:**
+- 0.5x: Half speed (great for slow motion effects)
+- 1x: Normal speed
+- 1.5x: Slightly faster (good for review)
+- 2x: Double speed (fast review)
+
+**Pro tip:** Use different speeds for different purposes - slow for detailed work, fast for quick review!
+
+Would you like me to explain other playback controls?`
     }
 
-    // PLAYBACK CONTROL COMMANDS
+    // PLAYBACK CONTROL GUIDANCE
     if (lowerCommand.includes('play') && !lowerCommand.includes('playback')) {
-      setIsPlaying(true)
-      toast.success('✅ Playing video')
-      return '✅ Playing video'
+      return `I can guide you on playback controls! Here's how:
+
+**To play/pause video:**
+1. Click the play/pause button in the center of the playback controls
+2. Or press the Space bar on your keyboard
+3. The button will show a play icon (▶️) when paused, pause icon (⏸️) when playing
+
+**Other playback controls:**
+- Skip backward/forward: Use the skip buttons (⏮️ ⏭️)
+- Timeline scrubbing: Click and drag on the timeline to jump to any point
+- Loop: Look for the loop button to repeat playback
+
+**Pro tip:** Use keyboard shortcuts for faster editing - Space for play/pause, arrow keys for frame-by-frame!
+
+Would you like me to explain timeline navigation or other features?`
     } else if (lowerCommand.includes('pause') || lowerCommand.includes('stop')) {
-      setIsPlaying(false)
-      toast.success('✅ Paused video')
-      return '✅ Paused video'
+      return `I can guide you on pausing the video! Here's how:
+
+**To pause/stop video:**
+1. Click the pause button (⏸️) in the playback controls
+2. Or press the Space bar on your keyboard
+3. The video will stop at the current position
+
+**Pro tip:** Pausing is great for making precise edits at specific moments!
+
+Would you like me to explain other playback features?`
     }
 
-    // SEEK/JUMP COMMANDS
+    // EXPORT GUIDANCE
+    if (lowerCommand.includes('export') || lowerCommand.includes('download') || lowerCommand.includes('render')) {
+      return `I can guide you through exporting your video! Here's how:
+
+**To export your video:**
+1. Look for the "Export" button (usually in the top-right corner or toolbar)
+2. Click it to open the export panel
+3. Choose your export settings:
+   - Format: MP4 (recommended for most uses)
+   - Quality: 1080p for high quality, 720p for smaller files
+   - Frame rate: 30fps for smooth motion
+4. Click "Export" or "Render" to start the process
+
+**Export tips:**
+- Higher quality = larger file size
+- 1080p is great for YouTube and social media
+- 720p is good for web sharing
+- Check the estimated file size before exporting
+
+**Pro tip:** Export a small test first to check quality before doing the full export!
+
+Would you like me to explain other features?`
+    }
+
+    // CLOSE GUIDANCE
+    if (lowerCommand.includes('close') || lowerCommand.includes('close this') || lowerCommand.includes('close page')) {
+      return `I can guide you on closing panels! Here's how:
+
+**To close panels or modals:**
+1. Look for the "X" button in the top-right corner of any open panel
+2. Or press the Escape key on your keyboard
+3. Click outside the panel to close it (if it's a modal)
+4. Use the "Close" button if available
+
+**Common panels to close:**
+- Export panel: Look for the X in the export dialog
+- Settings panel: Close button in settings
+- Help panel: X button in help window
+
+**Pro tip:** The Escape key usually closes most panels quickly!
+
+Would you like me to explain other interface features?`
+    }
+
+    // SEEK/JUMP GUIDANCE
     if (lowerCommand.includes('jump') || lowerCommand.includes('go to') || lowerCommand.includes('seek')) {
-      const match = lowerCommand.match(/(\d+)/)
-      if (match) {
-        const seconds = parseInt(match[0])
-        setCurrentTime(seconds)
-        toast.success(`✅ Jumped to ${seconds} seconds`)
-        return `✅ Jumped to ${seconds} seconds`
-      }
+      return `I can guide you on timeline navigation! Here's how:
+
+**To jump to a specific time:**
+1. Click anywhere on the timeline scrubber (the horizontal bar at the bottom)
+2. Or drag the playhead (vertical line) to the desired position
+3. Use the left/right arrow keys for frame-by-frame navigation
+4. Hold Shift + arrow keys for larger jumps
+
+**Timeline features:**
+- Click on the timeline to jump to that exact moment
+- Drag the playhead for smooth scrubbing
+- Use the zoom controls to see more detail
+- Timeline shows your video duration and current position
+
+**Pro tip:** You can also type a specific time in the time display to jump there!
+
+Would you like me to explain other navigation features?`
     }
 
-    // ZOOM COMMANDS
+    // ZOOM GUIDANCE
     if (lowerCommand.includes('zoom')) {
-      if (lowerCommand.includes('in')) {
-        const newZoom = Math.min(200, zoom + 20)
-        setZoom(newZoom)
-        toast.success(`✅ Zoomed in to ${newZoom}%`)
-        return `✅ Zoomed in to ${newZoom}%`
-      } else if (lowerCommand.includes('out')) {
-        const newZoom = Math.max(50, zoom - 20)
-        setZoom(newZoom)
-        toast.success(`✅ Zoomed out to ${newZoom}%`)
-        return `✅ Zoomed out to ${newZoom}%`
-      }
+      return `I can guide you on zooming! Here's how:
+
+**To zoom in/out:**
+1. Look for the zoom controls (usually +/- buttons or a slider)
+2. Or use your mouse wheel while holding Ctrl
+3. Or find the "View" menu for zoom options
+4. Zoom in to see more detail, zoom out to see the bigger picture
+
+**Zoom levels:**
+- 50%: See more of the timeline at once
+- 100%: Normal view (default)
+- 200%: See fine details for precise editing
+
+**Pro tip:** Use zoom to work on specific parts of your video with precision!
+
+Would you like me to explain other view options?`
     }
 
-    // FILTER/EFFECT COMMANDS
+    // FILTER/EFFECT GUIDANCE
     if (lowerCommand.includes('filter') || lowerCommand.includes('effect') || lowerCommand.includes('blur') || lowerCommand.includes('sepia') || lowerCommand.includes('grayscale') || lowerCommand.includes('vintage') || lowerCommand.includes('warm') || lowerCommand.includes('cool')) {
-      if (!targetClip) return 'No clip selected to apply effects'
-      
-      const videoElement = (document.querySelector(`[data-clip-id="${targetClip.id}"] video`) || document.querySelector('video')) as HTMLVideoElement
-      if (!videoElement) return 'No video element found'
-      
-      const currentFilters = (targetClip as any).filters || {}
-      let filterString = ''
-      let effectName = ''
-      
-      if (lowerCommand.includes('blur')) {
-        filterString = `blur(5px)`
-        effectName = 'blur'
-        currentFilters.blur = true
-      } else if (lowerCommand.includes('sepia')) {
-        filterString = `sepia(100%)`
-        effectName = 'sepia'
-        currentFilters.sepia = true
-      } else if (lowerCommand.includes('grayscale') || lowerCommand.includes('black and white')) {
-        filterString = `grayscale(100%)`
-        effectName = 'grayscale'
-        currentFilters.grayscale = true
-      } else if (lowerCommand.includes('invert')) {
-        filterString = `invert(100%)`
-        effectName = 'invert'
-        currentFilters.invert = true
-      } else if (lowerCommand.includes('vintage') || lowerCommand.includes('old')) {
-        filterString = `sepia(50%) contrast(110%) brightness(110%)`
-        effectName = 'vintage'
-        currentFilters.vintage = true
-      } else if (lowerCommand.includes('warm')) {
-        filterString = `sepia(30%) saturate(130%)`
-        effectName = 'warm'
-        currentFilters.warm = true
-      } else if (lowerCommand.includes('cool')) {
-        filterString = `hue-rotate(180deg) saturate(110%)`
-        effectName = 'cool'
-        currentFilters.cool = true
-      }
-      
-      if (filterString) {
-        const brightness = currentFilters.brightness || 100
-        const contrast = currentFilters.contrast || 100
-        const saturation = currentFilters.saturation || 100
-        
-        videoElement.style.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) ${filterString}`
-        
-        updateClip(targetClip.id, {
-          ...targetClip,
-          filters: currentFilters
-        } as any)
-        
-        toast.success(`✅ Applied ${effectName} effect`)
-        return `✅ Applied ${effectName} effect to "${targetClip.name}"`
-      }
-      
-      return 'Available effects: blur, sepia, grayscale, invert, vintage, warm, cool'
+      return `I can guide you on applying filters and effects! Here's how:
+
+**To apply filters:**
+1. Look for the "Filters" or "Effects" panel on the right side
+2. Browse through the available filter categories
+3. Click on any filter to preview it
+4. Adjust the intensity slider if available
+5. Click "Apply" to add it to your video
+
+**Popular filter types:**
+- **Blur**: Soft focus effect
+- **Sepia**: Vintage brown tone
+- **Grayscale**: Black and white
+- **Vintage**: Old film look
+- **Warm**: Orange/yellow tint
+- **Cool**: Blue tint
+- **Dramatic**: High contrast look
+
+**Pro tip:** Start with subtle effects and adjust the intensity to taste!
+
+Would you like me to explain specific filter effects?`
     }
 
-    // CUT/SPLIT COMMANDS
+    // UNDO/REDO GUIDANCE
+    if (lowerCommand.includes('undo') || lowerCommand.includes('revert')) {
+      return `I can guide you on undoing changes! Here's how:
+
+**To undo your last action:**
+1. Click the "Undo" button (↶) in the toolbar
+2. Or press Ctrl+Z on your keyboard
+3. You can undo multiple actions by pressing Ctrl+Z repeatedly
+4. The undo button will be grayed out when there's nothing to undo
+
+**Undo tips:**
+- Undo works for most editing actions
+- You can undo several steps back
+- Some actions like saving can't be undone
+
+**Pro tip:** Use Ctrl+Z frequently while editing to quickly fix mistakes!
+
+Would you like me to explain redo or other editing features?`
+    }
+
+    if (lowerCommand.includes('redo')) {
+      return `I can guide you on redoing changes! Here's how:
+
+**To redo an undone action:**
+1. Click the "Redo" button (↷) in the toolbar
+2. Or press Ctrl+Y on your keyboard
+3. You can redo multiple actions by pressing Ctrl+Y repeatedly
+4. The redo button will be grayed out when there's nothing to redo
+
+**Redo tips:**
+- Redo only works after you've undone something
+- You can redo back to where you were before undoing
+- Redo is great for experimenting with different approaches
+
+**Pro tip:** Use Ctrl+Y to quickly redo actions after undoing!
+
+Would you like me to explain other editing features?`
+    }
+
+    // RESET GUIDANCE
+    if (lowerCommand.includes('reset') || lowerCommand.includes('remove all filters') || lowerCommand.includes('clear filters') || lowerCommand.includes('resetfilters')) {
+      return `I can guide you on resetting your video! Here's how:
+
+**To reset all filters and adjustments:**
+1. Look for the "Reset" button in the adjustments panel
+2. Or find "Clear All" in the filters panel
+3. Or use the "Reset" option in the right-click menu
+4. This will remove all applied filters and return to original settings
+
+**What gets reset:**
+- All visual filters (blur, sepia, vintage, etc.)
+- Brightness, contrast, and saturation adjustments
+- Any color grading effects
+- Text overlays and effects
+
+**Pro tip:** You can also reset individual adjustments by setting their sliders back to default values!
+
+Would you like me to explain other editing features?`
+    }
+
+    // FILTER ADDITION GUIDANCE
+    if (lowerCommand.includes('addfilter') || lowerCommand.includes('add filter')) {
+      return `I can guide you on adding filters! Here's how:
+
+**To add a filter:**
+1. Go to the "Filters" or "Effects" panel on the right side
+2. Browse through the available filter categories
+3. Click on the filter you want to add
+4. Adjust the intensity if there's a slider
+5. The filter will be applied to your video
+
+**Filter categories:**
+- **Color**: Sepia, grayscale, vintage, warm, cool
+- **Blur**: Soft focus, motion blur
+- **Stylize**: Dramatic, high contrast, artistic
+- **Adjust**: Brightness, contrast, saturation
+
+**Pro tip:** You can apply multiple filters and adjust their order!
+
+Would you like me to explain specific filter types?`
+    }
+
+    // STATUS GUIDANCE
+    if (lowerCommand.includes('test') || lowerCommand.includes('debug') || lowerCommand.includes('status')) {
+      return `I can help you check your video editing status! Here's what to look for:
+
+**Current project status:**
+- **Clips loaded**: ${clips.length} video clip${clips.length !== 1 ? 's' : ''} in your timeline
+- **Selected clip**: ${selectedClipId ? 'One clip is selected' : 'No clip selected'}
+- **Active filters**: ${activeFilters.length} filter${activeFilters.length !== 1 ? 's' : ''} applied
+- **Adjustments**: Brightness, contrast, and saturation settings
+
+**To check your project:**
+1. Look at the timeline to see all your clips
+2. Check the adjustments panel for current settings
+3. Review the filters panel for applied effects
+4. Use the preview to see your changes
+
+**Pro tip:** Save your project regularly to avoid losing your work!
+
+Would you like me to explain how to check specific aspects of your project?`
+    }
+
+    // BRIGHTNESS TEST GUIDANCE
+    if (lowerCommand.includes('test brightness') || lowerCommand.includes('test state')) {
+      return `I can guide you on testing brightness adjustments! Here's how:
+
+**To test brightness changes:**
+1. Go to the "Adjustments" panel on the right side
+2. Find the "Brightness" slider
+3. Move it slightly to the right to increase brightness
+4. Watch the preview to see the change
+5. Move it back if you don't like the result
+
+**Testing tips:**
+- Make small adjustments first (10-20%)
+- Use the preview to see changes in real-time
+- You can always undo with Ctrl+Z
+- Test different values to find what looks best
+
+**Pro tip:** Test adjustments on a small section first before applying to the whole video!
+
+Would you like me to explain other adjustment testing methods?`
+    }
+
+    // FORCE UPDATE GUIDANCE
+    if (lowerCommand.includes('force update') || lowerCommand.includes('force test')) {
+      return `I can guide you on making sure your changes are applied! Here's how:
+
+**To ensure changes are applied:**
+1. Make sure you have a video clip selected
+2. Use the adjustment sliders in the right panel
+3. Watch the preview to see changes in real-time
+4. If changes aren't visible, try refreshing the preview
+5. Save your project to preserve changes
+
+**Troubleshooting:**
+- Make sure a clip is selected before making adjustments
+- Check that the preview is playing or paused at the right moment
+- Try adjusting the sliders more dramatically to see the effect
+- Use undo/redo to test if changes are being tracked
+
+**Pro tip:** Always preview your changes before finalizing them!
+
+Would you like me to explain other troubleshooting methods?`
+    }
+
+    // BRIGHTNESS GUIDANCE
+    if (lowerCommand.includes('make brighter') || lowerCommand.includes('brighter')) {
+      return `I can guide you on making your video brighter! Here's how:
+
+**To make your video brighter:**
+1. Go to the "Adjustments" panel on the right side
+2. Find the "Brightness" slider
+3. Move it to the right to increase brightness
+4. Start with a small increase (10-20%) and adjust as needed
+5. Watch the preview to see the change
+
+**Brightness tips:**
+- Don't overdo it - too much brightness can wash out details
+- Adjust in small increments for best results
+- Consider adjusting contrast after brightness
+- Use the preview to see changes in real-time
+
+**Pro tip:** Brightness works great with contrast adjustments for better results!
+
+Would you like me to explain contrast or other adjustments?`
+    }
+
+    if (lowerCommand.includes('undolast') || lowerCommand.includes('undo last')) {
+      return `I can guide you on undoing your last action! Here's how:
+
+**To undo your last action:**
+1. Click the "Undo" button (↶) in the toolbar
+2. Or press Ctrl+Z on your keyboard
+3. This will reverse your most recent change
+4. The undo button will be grayed out when there's nothing to undo
+
+**Undo tips:**
+- Undo works for most editing actions
+- You can undo multiple steps back
+- Some actions like saving can't be undone
+- Use undo frequently while editing
+
+**Pro tip:** Use Ctrl+Z to quickly fix mistakes while editing!
+
+Would you like me to explain redo or other editing features?`
+    }
+
+    // CUT/SPLIT GUIDANCE
     if (lowerCommand.includes('cut') || lowerCommand.includes('split')) {
-      if (!targetClip) return 'No clip selected to cut'
-      
-      const cutTime = currentTime
-      
-      if (cutTime > targetClip.startTime && cutTime < targetClip.endTime) {
-        const newClip = {
-          trackId: targetClip.trackId,
-          name: `${targetClip.name} (2)`,
-          type: targetClip.type,
-          startTime: cutTime,
-          endTime: targetClip.endTime,
-          duration: targetClip.endTime - cutTime,
-          file: targetClip.file,
-          url: targetClip.url,
-          content: targetClip.content,
-          waveform: targetClip.waveform
-        }
-        
-        updateClip(targetClip.id, { 
-          endTime: cutTime,
-          duration: cutTime - targetClip.startTime
-        })
-        
-        addClip(newClip)
-        
-        toast.success('✅ Clip cut successfully')
-        return `✅ Cut clip "${targetClip.name}" at ${cutTime.toFixed(2)}s`
-      } else {
-        return 'Current time is not within the clip boundaries'
-      }
+      return `I can guide you on cutting and splitting your video! Here's how:
+
+**To cut or split a video:**
+1. Position the playhead where you want to make the cut
+2. Look for the "Cut" or "Split" tool in the toolbar
+3. Click the cut tool to split the clip at that point
+4. This will create two separate clips from the original
+
+**Cutting tips:**
+- Make sure you're at the exact moment you want to cut
+- You can cut multiple times to create several clips
+- Each cut creates a new clip that you can edit separately
+- Use the timeline to see where your cuts are
+
+**Pro tip:** Use the razor tool icon (✂️) for cutting clips!
+
+Would you like me to explain other editing tools?`
     }
 
-    // DELETE/REMOVE COMMANDS
-    if (lowerCommand.includes('delete') || lowerCommand.includes('remove')) {
-      if (!targetClip) return 'No clip selected to delete'
-      
-      removeClip(targetClip.id)
-      toast.success('✅ Clip deleted')
-      return `✅ Deleted clip "${targetClip.name}"`
+    // DELETE/REMOVE GUIDANCE
+    if (lowerCommand.includes('delete') || lowerCommand.includes('remove') || lowerCommand.includes('remove this')) {
+      return `I can guide you on deleting clips! Here's how:
+
+**To delete a clip:**
+1. Select the clip you want to delete in the timeline
+2. Right-click on the selected clip
+3. Choose "Delete" from the context menu
+4. Or press the Delete key on your keyboard
+5. Confirm the deletion if prompted
+
+**Deletion tips:**
+- Make sure you have the right clip selected
+- You can undo deletions with Ctrl+Z
+- Deleted clips can't be recovered unless you undo
+- Double-check before deleting important content
+
+**Pro tip:** Use the Delete key for quick deletion of selected clips!
+
+Would you like me to explain other editing operations?`
     }
 
-    // RESET/CLEAR FILTERS
+    // RESET/CLEAR GUIDANCE
     if (lowerCommand.includes('reset') || lowerCommand.includes('clear')) {
-      if (!targetClip) return 'No clip selected'
-      
-      const videoElement = document.querySelector('video') as HTMLVideoElement
-      if (videoElement) {
-        videoElement.style.filter = 'none'
-      }
-      
-      updateClip(targetClip.id, {
-        ...targetClip,
-        filters: {}
-      } as any)
-      
-      toast.success('✅ All filters cleared')
-      return `✅ Cleared all filters from "${targetClip.name}"`
+      return `I can guide you on resetting and clearing your video! Here's how:
+
+**To reset or clear changes:**
+1. Go to the "Adjustments" panel on the right side
+2. Look for the "Reset" button
+3. Click it to clear all adjustments (brightness, contrast, saturation)
+4. Or go to the "Filters" panel and click "Clear All"
+5. This will return your video to its original state
+
+**What gets reset:**
+- All visual filters (blur, sepia, vintage, etc.)
+- Brightness, contrast, and saturation adjustments
+- Any color grading effects
+- Text overlays and effects
+
+**Pro tip:** You can also reset individual adjustments by setting their sliders back to default values!
+
+Would you like me to explain other editing features?`
+    }
+
+    // UNDO/REDO GUIDANCE
+    if (lowerCommand.includes('undo')) {
+      return `I can guide you on undoing changes! Here's how:
+
+**To undo your last action:**
+1. Click the "Undo" button (↶) in the toolbar
+2. Or press Ctrl+Z on your keyboard
+3. You can undo multiple actions by pressing Ctrl+Z repeatedly
+4. The undo button will be grayed out when there's nothing to undo
+
+**Undo tips:**
+- Undo works for most editing actions
+- You can undo several steps back
+- Some actions like saving can't be undone
+- Use undo frequently while editing
+
+**Pro tip:** Use Ctrl+Z to quickly fix mistakes while editing!
+
+Would you like me to explain redo or other editing features?`
+    } else if (lowerCommand.includes('redo')) {
+      return `I can guide you on redoing changes! Here's how:
+
+**To redo an undone action:**
+1. Click the "Redo" button (↷) in the toolbar
+2. Or press Ctrl+Y on your keyboard
+3. You can redo multiple actions by pressing Ctrl+Y repeatedly
+4. The redo button will be grayed out when there's nothing to redo
+
+**Redo tips:**
+- Redo only works after you've undone something
+- You can redo back to where you were before undoing
+- Redo is great for experimenting with different approaches
+
+**Pro tip:** Use Ctrl+Y to quickly redo actions after undoing!
+
+Would you like me to explain other editing features?`
+    }
+
+    // SELECT GUIDANCE
+    if (lowerCommand.includes('select all') || lowerCommand.includes('select everything')) {
+      return `I can guide you on selecting clips! Here's how:
+
+**To select all clips:**
+1. Click and drag across all clips in the timeline
+2. Or press Ctrl+A to select all clips
+3. Or hold Ctrl and click on each clip you want to select
+4. Selected clips will be highlighted
+
+**Selection tips:**
+- You can select multiple clips at once
+- Selected clips can be moved, deleted, or edited together
+- Use Shift+click to select a range of clips
+- Click on empty space to deselect all clips
+
+**Pro tip:** Use Ctrl+A to quickly select all clips in your timeline!
+
+Would you like me to explain other selection methods?`
+    } else if (lowerCommand.includes('select') || lowerCommand.includes('select this')) {
+      return `I can guide you on selecting clips! Here's how:
+
+**To select a clip:**
+1. Click on the clip you want to select in the timeline
+2. The selected clip will be highlighted
+3. You can then edit, move, or delete the selected clip
+4. Click on another clip to select it instead
+
+**Selection tips:**
+- Only one clip can be selected at a time
+- Selected clips show their properties in the right panel
+- Use the arrow keys to navigate between clips
+- Right-click on a clip for more options
+
+**Pro tip:** Click on a clip to select it, then use the right panel to edit its properties!
+
+Would you like me to explain other editing features?`
+    }
+
+    // HELP/COMMANDS LIST
+    if (lowerCommand.includes('help') || lowerCommand.includes('commands') || lowerCommand.includes('what can you do')) {
+      return `I'm your video editing guide! Here's what I can help you with:
+
+🎬 **VIDEO EDITING GUIDANCE:**
+✅ **Brightness**: "How do I make it brighter?", "adjust brightness"
+✅ **Contrast**: "How do I add contrast?", "adjust contrast"  
+✅ **Saturation**: "How do I make it colorful?", "adjust saturation"
+✅ **Effects**: "How do I add blur?", "apply sepia filter", "vintage effect"
+✅ **Volume**: "How do I change volume?", "mute audio"
+✅ **Playback**: "How do I play/pause?", "change speed"
+✅ **Navigation**: "How do I jump to time?", "zoom in/out"
+✅ **Export**: "How do I export?", "download video", "render video"
+✅ **Editing**: "How do I cut clips?", "delete clip", "reset filters"
+✅ **Selection**: "How do I select clips?", "select all"
+✅ **History**: "How do I undo?", "redo changes"
+✅ **Interface**: "How do I close panels?", "navigate interface"
+
+❌ **WHAT I CAN'T DO:**
+• I can't make direct changes to your video
+• I can't upload files for you
+• I can't save your project
+• I can't create new projects
+
+**I'm here to guide you through the process!** Just ask "How do I..." and I'll show you the steps!
+
+What would you like to learn about?`
     }
 
     // Default response
-    return `I understand you want to: "${command}". Try these commands:
+    return `I understand you want to: "${command}". 
 
-✅ Brightness: "increase brightness by 20", "make it darker"
-✅ Contrast: "add more contrast", "decrease contrast"
-✅ Saturation: "make it more colorful", "increase saturation"
-✅ Effects: "add blur effect", "apply sepia filter", "vintage effect"
-✅ Volume: "set volume to 80", "mute audio"
-✅ Playback: "play", "pause", "speed up to 2x"
-✅ Navigation: "jump to 30 seconds", "zoom in"
-✅ Editing: "cut here", "delete clip", "reset filters"`
+I'm here to guide you through video editing! Here's what I can help you with:
+
+🎬 **VIDEO EDITING GUIDANCE:**
+• **Brightness, contrast, saturation** - How to adjust these settings
+• **Visual effects** - How to apply blur, sepia, vintage, etc.
+• **Playback control** - How to play, pause, change speed
+• **Timeline navigation** - How to jump to time, zoom in/out
+• **Basic editing** - How to cut, delete, reset, select clips
+• **History** - How to undo and redo changes
+
+📤 **EXPORT & NAVIGATION:**
+• **Export video** - How to download and render your video
+• **Interface** - How to close panels and navigate
+
+❌ **WHAT I CAN'T DO:**
+• I can't make direct changes to your video
+• I can't upload files for you
+• I can't save your project
+• I can't create new projects
+
+**I'm here to guide you through the process!** Just ask "How do I..." and I'll show you the steps!
+
+Try saying "help" for a full list of guidance topics!`
   }
 
   // Auto-scroll to bottom when new messages arrive
@@ -488,15 +832,15 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
   // Add welcome message when panel opens
   useEffect(() => {
     if (isOpen && messages.length === 0) {
-      addMessage('assistant', 'Welcome! I\'m your Video Editor AI Assistant. I can help you edit videos with voice and text commands!')
-      addMessage('system', 'Try: "increase brightness", "add blur effect", "play video", or click "Start Voice" to use voice commands')
+      addMessage('assistant', 'Welcome! I\'m your Video Editor Guide. I can help you learn how to edit videos with step-by-step guidance!')
+      addMessage('system', 'I can guide you through: "How do I adjust brightness?", "How do I add effects?", "How do I play video?", "How do I export?", or say "help" for all guidance topics!')
     }
   }, [isOpen])
 
   // Listen for call end events from other assistants and page navigation
   useEffect(() => {
     const handleCallEnded = (event: CustomEvent) => {
-      if (event.detail.source !== 'video-editor-assistant' && isConnected) {
+      if (event.detail.source !== 'video-editor' && isConnected) {
         logger.info('📞 Call ended by another assistant, cleaning up video editor...')
         // Reset states when another assistant ends the call
         setIsConnected(false)
@@ -521,7 +865,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
         try {
           vapiRef.current.stop()
         } catch (err) {
-          console.error('Error stopping VAPI on page unload:', err)
+          logger.error('Error stopping VAPI on page unload:', err)
         }
         vapiRef.current.removeAllListeners()
         vapiRef.current = null
@@ -582,9 +926,9 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
           setIsLoading(false)
           setError(null)
           setIsListening(true)
-          setStatusMessage('Connected - Ready to edit')
-          addMessage('system', 'Video editing assistant is ready!')
-          addMessage('assistant', 'Hello! I\'m your video editing assistant. I can help you adjust brightness, add effects, cut clips, and more. Try saying "Increase brightness" or "Add blur effect"!')
+          setStatusMessage('Connected - Ready to guide')
+          addMessage('system', 'Video editing guide is ready!')
+          addMessage('assistant', 'Hello! I\'m your video editing guide. I can help you learn how to adjust brightness, add effects, cut clips, and more. Try asking "How do I increase brightness?" or "How do I add blur effect?"!')
         })
 
         vapiRef.current.on('call-end', () => {
@@ -595,7 +939,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
           setIsListening(false)
           setIsMuted(false)
           setStatusMessage('Call ended')
-          addMessage('system', 'Video editing session ended. Click "Start Editing" to continue.')
+          addMessage('system', 'Video editing guidance session ended. Click "Start Voice" to continue.')
           // Clean up session manager
           vapiSessionManager.endCall('video-editor')
           // Ensure clean state
@@ -603,27 +947,27 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
           vapiRef.current = null
         })
 
-        vapiRef.current.on('speech-start', (data: any) => {
+        vapiRef.current.on('speech-start', (data: { role: string }) => {
           logger.debug('🎤 Video Editor Speech started:', data)
           if (data.role === 'assistant') {
             setIsSpeaking(true)
             setIsListening(false)
-            setStatusMessage('Assistant is speaking...')
+            setStatusMessage('Guide is speaking...')
           } else if (data.role === 'user') {
             setIsListening(false)
             setStatusMessage('You are speaking...')
           }
         })
 
-        vapiRef.current.on('speech-end', (data: any) => {
+        vapiRef.current.on('speech-end', (data: { role: string }) => {
           logger.debug('🔇 Video Editor Speech ended:', data)
           if (data.role === 'assistant') {
             setIsSpeaking(false)
             setIsListening(true)
-            setStatusMessage('Listening for commands...')
+            setStatusMessage('Listening for questions...')
           } else if (data.role === 'user') {
             setIsListening(true)
-            setStatusMessage('Listening for commands...')
+            setStatusMessage('Listening for questions...')
           }
         })
 
@@ -637,10 +981,10 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
         vapiRef.current.on('user-speech-end', () => {
           logger.debug('🔇 User finished speaking (alternative)')
           setIsListening(true)
-          setStatusMessage('Listening for commands...')
+          setStatusMessage('Listening for questions...')
         })
 
-        vapiRef.current.on('message', async (message: any) => {
+        vapiRef.current.on('message', async (message: { type: string; transcriptType?: string; role?: string; transcript?: string; text?: string }) => {
           logger.debug('💬 Video Editor Message received:', message)
           
           // Handle transcript messages
@@ -651,14 +995,15 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
               if (text) {
                 addMessage(role === 'assistant' ? 'assistant' : 'user', text)
                 
-                // Process user commands automatically
+                // Process user questions automatically
                 if (role === 'user') {
                   try {
                     const response = await processCommand(text)
-                    addMessage('system', response)
-                  } catch (error: any) {
-                    console.error('Error processing command:', error)
-                    addMessage('system', `Error: ${error.message}`)
+                    addMessage('assistant', response)
+                  } catch (error: unknown) {
+                    logger.error('Error processing question:', error)
+                    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+                    addMessage('system', `Error: ${errorMessage}`)
                   }
                 }
               }
@@ -671,9 +1016,9 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
           }
         })
 
-        vapiRef.current.on('error', (error: any) => {
-          console.error('❌ Video Editor VAPI Error:', error)
-          console.error('❌ Video Editor VAPI Error Details:', JSON.stringify(error, null, 2))
+        vapiRef.current.on('error', (error: { errorMsg?: string; message?: string; error?: { message?: string }; type?: string }) => {
+          logger.error('❌ Video Editor VAPI Error:', error)
+          logger.error('❌ Video Editor VAPI Error Details:', JSON.stringify(error, null, 2))
           
           let errorMessage = 'Unknown VAPI error'
           if (error.errorMsg) {
@@ -698,9 +1043,10 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
         setStatusMessage('Ready to edit! Click to start.')
         logger.info('✅ Video Editor VAPI initialized successfully')
 
-      } catch (err: any) {
-        console.error('Failed to initialize Video Editor VAPI:', err)
-        setError(`Failed to initialize VAPI: ${err.message}`)
+      } catch (err: unknown) {
+        logger.error('Failed to initialize Video Editor VAPI:', err)
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error'
+        setError(`Failed to initialize VAPI: ${errorMessage}`)
         setStatusMessage('Failed to initialize. Please check your configuration.')
       }
     }
@@ -714,7 +1060,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
         try {
           vapiRef.current.stop()
         } catch (err) {
-          console.error('Error during cleanup:', err)
+          logger.error('Error during cleanup:', err)
         }
         vapiRef.current.removeAllListeners()
         vapiRef.current = null
@@ -746,19 +1092,40 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
       
       logger.info('🚀 Starting Video Editor VAPI call with:', { workflowId: configWorkflowId, assistantId: configAssistantId })
       
-      // Start call using workflow id string (preferred)
-      if (configWorkflowId) {
-        await vapiRef.current.start(configWorkflowId)
-      } else if (configAssistantId) {
-        await vapiRef.current.start(configAssistantId)
-      } else {
-        throw new Error('Missing workflow/assistant id')
+      // Prevent audio feedback before starting call
+      await preventAudioFeedback()
+
+      // Try multiple start signatures to support SDK variations
+      const tryStartSequence: Array<() => Promise<any>> = []
+      if (configAssistantId) {
+        tryStartSequence.push(() => vapiRef.current.start(configAssistantId))
+        tryStartSequence.push(() => vapiRef.current.start({ assistant: { id: configAssistantId } }))
       }
+      if (configWorkflowId) {
+        tryStartSequence.push(() => vapiRef.current.start(configWorkflowId))
+        tryStartSequence.push(() => vapiRef.current.start({ assistant: { workflow: { id: configWorkflowId } } }))
+      }
+      if (tryStartSequence.length === 0) throw new Error('Missing workflow/assistant id')
+
+      let started = false
+      let lastError: unknown = null
+      for (const startAttempt of tryStartSequence) {
+        try {
+          await startAttempt()
+          started = true
+          break
+        } catch (e) {
+          lastError = e
+          logger.warn('Start attempt failed in video editor, trying next signature...', e)
+        }
+      }
+      if (!started) throw lastError || new Error('Failed to start VAPI call')
       
-    } catch (err: any) {
-      console.error('Failed to start call:', err)
-      console.error('Start call error details:', JSON.stringify(err, null, 2))
-      setError(`Failed to start call: ${err.message || err.errorMsg || 'Unknown error'}`)
+    } catch (err: unknown) {
+      logger.error('Failed to start call:', err)
+      logger.error('Start call error details:', JSON.stringify(err, null, 2))
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
+      setError(`Failed to start call: ${errorMessage}`)
       setIsLoading(false)
       setStatusMessage('Failed to start call. Please try again.')
       
@@ -799,7 +1166,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
           vapiRef.current.removeAllListeners()
           vapiRef.current = null
         } catch (e) {
-          console.error('Error during force cleanup:', e)
+          logger.error('Error during force cleanup:', e)
         }
       }
     }, 3000)
@@ -820,7 +1187,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
         await vapiRef.current.stop()
         logger.info('✅ VAPI video editor stop successful')
       } catch (stopError) {
-        console.warn('⚠️ Primary stop failed, trying alternative methods:', stopError)
+        logger.warn('⚠️ Primary stop failed, trying alternative methods:', stopError)
         
         // Try alternative stop methods
         try {
@@ -829,7 +1196,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
             logger.info('✅ VAPI destroyed successfully')
           }
         } catch (destroyError) {
-          console.warn('⚠️ Destroy failed:', destroyError)
+          logger.warn('⚠️ Destroy failed:', destroyError)
         }
         
         // Force cleanup regardless
@@ -842,7 +1209,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
       }
       
     } catch (err) {
-      console.error('❌ Error stopping VAPI video editor call:', err)
+      logger.error('❌ Error stopping VAPI video editor call:', err)
     } finally {
       // Always perform cleanup
       setIsConnected(false)
@@ -876,35 +1243,11 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
         setStatusMessage(newMutedState ? 'Microphone muted' : 'Microphone active')
         addMessage('system', newMutedState ? 'Microphone muted' : 'Microphone unmuted')
       } catch (err) {
-        console.error('Error toggling mute:', err)
+        logger.error('Error toggling mute:', err)
       }
     }
   }
 
-  // Handle text input submission
-  const handleTextSubmit = async () => {
-    const trimmedInput = textInput.trim()
-    if (!trimmedInput) return
-
-    addMessage('user', trimmedInput)
-    setTextInput('')
-
-    try {
-      const response = await processCommand(trimmedInput)
-      addMessage('assistant', response)
-    } catch (error: any) {
-      console.error('Error processing text command:', error)
-      addMessage('system', `Error: ${error.message}`)
-    }
-  }
-
-  // Handle Enter key in text input
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleTextSubmit()
-    }
-  }
 
   const getPositionClasses = () => {
     switch (position) {
@@ -972,22 +1315,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
             <div className="absolute inset-0 bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500" style={{ display: 'none' }}></div>
             <div className="absolute inset-0 bg-gradient-to-br from-purple-500/40 via-pink-500/40 to-orange-500/40"></div>
             
-            {/* Status Icon Overlay */}
-            {isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
-                <Loader2 className="w-7 h-7 text-white animate-spin drop-shadow-lg" />
-              </div>
-            )}
-            {isConnected && !isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
-                <div className="w-7 h-7 rounded-full bg-green-500 animate-pulse" />
-              </div>
-            )}
-            {error && !isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
-                <div className="w-7 h-7 rounded-full bg-red-500" />
-              </div>
-            )}
+            {/* Status overlays removed to avoid overlapping dot */}
           </div>
           
           {/* Pulse effect when connected */}
@@ -1087,9 +1415,9 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
                       className="w-full h-full object-cover"
                     />
                   </motion.div>
-                  <h4 className="text-xl font-bold text-white mb-2">Ready to Edit!</h4>
+                  <h4 className="text-xl font-bold text-white mb-2">Ready to Guide!</h4>
                   <p className="text-sm text-gray-400 text-center max-w-xs leading-relaxed">
-                    Click <span className="text-green-400 font-semibold">"Start Voice"</span> below to begin voice-controlled video editing
+                    Click <span className="text-green-400 font-semibold">"Start Call"</span> below to begin voice-guided video editing help
                   </p>
                 </div>
               ) : (
@@ -1176,35 +1504,10 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
               )}
             </AnimatePresence>
 
-            {/* Text Input (Always Available) */}
-            <div className="px-6 py-4 border-t border-gray-700/50 bg-gray-800/50 backdrop-blur-sm">
-              <div className="flex items-center gap-3">
-                <input
-                  type="text"
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Type a command... (e.g., 'increase brightness')"
-                  className="flex-1 px-4 py-3 bg-gray-700/50 border border-gray-600/50 text-white placeholder-gray-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all"
-                />
-                <motion.button
-                  onClick={handleTextSubmit}
-                  disabled={!textInput.trim()}
-                  whileHover={{ scale: textInput.trim() ? 1.05 : 1 }}
-                  whileTap={{ scale: textInput.trim() ? 0.95 : 1 }}
-                  className={`p-3 rounded-xl transition-all duration-300 ${
-                    textInput.trim()
-                      ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-lg shadow-purple-500/20'
-                      : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
-                  }`}
-                >
-                  <Send className="w-5 h-5" />
-                </motion.button>
-              </div>
-            </div>
+
 
             {/* Voice Controls */}
-            <div className="px-6 py-4 border-t border-gray-700/50 bg-gray-800/50 backdrop-blur-sm">
+            <div className="px-6 py-5 border-t border-gray-700/50 bg-gray-800/50 backdrop-blur-sm">
               <div className="flex gap-3">
                 {!isConnected ? (
                   <motion.button
@@ -1222,7 +1525,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
                     ) : (
                       <>
                         <Phone className="w-6 h-6" />
-                        <span>Start Voice</span>
+                        <span>Start Call</span>
                       </>
                     )}
                   </motion.button>
@@ -1255,7 +1558,7 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
                       ) : (
                         <>
                           <PhoneOff className="w-6 h-6" />
-                          <span>End Voice</span>
+                          <span>End Call</span>
                         </>
                       )}
                     </motion.button>

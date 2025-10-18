@@ -6,6 +6,7 @@ import {
   X
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { logger } from '../utils/logger'
 import { useVideoEditor } from '../contexts/VideoEditorContext'
 import { startRenderJob, getRenderStatus } from '../services/renderService'
 
@@ -76,7 +77,7 @@ const ExportPanel = ({ projectId, duration, onClose }: ExportPanelProps) => {
       }
 
     } catch (error) {
-      console.error('Fallback export failed:', error)
+      logger.error('Fallback export failed:', error)
       toast.error('❌ Fallback export failed. Please try again.')
       setIsExporting(false)
       setProgress(null)
@@ -192,7 +193,7 @@ const ExportPanel = ({ projectId, duration, onClose }: ExportPanelProps) => {
       void poll()
 
     } catch (error) {
-      console.error('Export failed:', error)
+      logger.error('Export failed:', error)
       toast.error('❌ Backend server not available. Switching to fallback mode...')
       setUseFallbackExport(true)
       setIsExporting(false)

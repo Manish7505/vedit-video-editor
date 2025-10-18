@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import { logger } from '../utils/logger'
 
 import { 
   Play, 
@@ -165,6 +166,19 @@ const VideoEditor = () => {
   
   // Export state
   const [showExportPanel, setShowExportPanel] = useState(false)
+  
+  // Listen for VAPI export commands
+  useEffect(() => {
+    const handleOpenExportPanel = () => {
+      setShowExportPanel(true)
+    }
+    
+    window.addEventListener('open-export-panel', handleOpenExportPanel)
+    
+    return () => {
+      window.removeEventListener('open-export-panel', handleOpenExportPanel)
+    }
+  }, [])
   
   // Media upload state
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
@@ -362,10 +376,10 @@ const VideoEditor = () => {
               // Media was removed from document - this is normal during cleanup
               // Video playback interrupted
             } else {
-              console.error('Error toggling video playback:', error)
+              logger.error('Error toggling video playback:', error)
             }
           } else {
-            console.error('Error toggling video playback:', error)
+            logger.error('Error toggling video playback:', error)
           }
           setIsPlaying(false)
         }
@@ -387,10 +401,10 @@ const VideoEditor = () => {
               // Media was removed from document - this is normal during cleanup
               // Audio playback interrupted
             } else {
-              console.error('Error toggling audio playback:', error)
+              logger.error('Error toggling audio playback:', error)
             }
           } else {
-            console.error('Error toggling audio playback:', error)
+            logger.error('Error toggling audio playback:', error)
           }
           setIsPlaying(false)
         }
@@ -924,7 +938,7 @@ const VideoEditor = () => {
         }
       }
     } catch (error) {
-      console.error('Upload error:', error)
+      logger.error('Upload error:', error)
       toast.error('Failed to upload files')
     } finally {
       setIsUploading(false)
@@ -1052,7 +1066,7 @@ const VideoEditor = () => {
   //   newTracks.splice(hoverIndex, 0, draggedTrack)
   //   
   //   // Update track order in store (would need to implement this in the store)
-  //   console.log('Reorder tracks:', newTracks)
+  //   logger.debug('Reorder tracks:', newTracks)
   // }, [tracks])
 
   const handleDeleteTrack = useCallback((trackId: string) => {
@@ -1355,6 +1369,8 @@ const VideoEditor = () => {
             <span className="hidden sm:inline">Save</span>
           </button>
           <button 
+            id="export-button"
+            data-testid="export-button"
             onClick={() => setShowExportPanel(true)}
             className="px-3 py-1.5 bg-white text-black text-sm font-medium rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors flex items-center gap-2"
           >
@@ -1710,7 +1726,7 @@ const VideoEditor = () => {
                                 
                                 // Added sample audio
                               } catch (error) {
-                                console.error('Error creating audio:', error)
+                                logger.error('Error creating audio:', error)
                                 // Fallback to mock audio
                                 const audioUrl = `data:audio/wav;base64,${btoa('sample-audio-' + audio.name)}`
                                 const duration = audio.duration === '0:15' ? 15 : 
@@ -3288,7 +3304,7 @@ const VideoEditor = () => {
 
                 {activeRightTab === 'ai-assistant' && (
                   <div className="h-full flex flex-col -m-4">
-                    <VideoEditorAI isOpen={true} isInSidebar={true} />
+                    <VideoEditorAI isOpen={true} />
                   </div>
                 )}
               </div>

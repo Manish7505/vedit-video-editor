@@ -33,13 +33,28 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
   const [messages, setMessages] = useState<Message[]>([])
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isListening, setIsListening] = useState(false)
+  const [isInHeroSection, setIsInHeroSection] = useState(true)
+  const [isInFooterSection, setIsInFooterSection] = useState(false)
   
   const vapiRef = useRef<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Get configuration from environment
-  const publicKey = import.meta.env.VITE_VAPI_PUBLIC_KEY || ''
-  const configWorkflowId = workflowId || import.meta.env.VITE_VAPI_WORKFLOW_ID || ''
+  // Get configuration from environment (prefer homepage-specific keys, then video, then general)
+  const publicKey =
+    import.meta.env.VITE_VAPI_HOME_PUBLIC_KEY ||
+    import.meta.env.VITE_VAPI_VIDEO_PUBLIC_KEY ||
+    import.meta.env.VITE_VAPI_PUBLIC_KEY ||
+    ''
+  const configWorkflowId =
+    workflowId ||
+    import.meta.env.VITE_VAPI_HOME_WORKFLOW_ID ||
+    import.meta.env.VITE_VAPI_VIDEO_WORKFLOW_ID ||
+    import.meta.env.VITE_VAPI_WORKFLOW_ID ||
+    ''
+  const configAssistantId =
+    import.meta.env.VITE_VAPI_HOME_ASSISTANT_ID ||
+    import.meta.env.VITE_VAPI_VIDEO_ASSISTANT_ID ||
+    ''
 
   // Prevent audio feedback by setting proper audio routing
   const preventAudioFeedback = async () => {
@@ -60,7 +75,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
       
       logger.debug('✅ Audio feedback prevention configured')
     } catch (err) {
-      console.error('Error configuring audio feedback prevention:', err)
+      logger.error('Error configuring audio feedback prevention:', err)
     }
   }
 
@@ -81,23 +96,70 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
   }, [messages])
 
 
-  // Show/hide based on scroll position (hide on hero section)
+  // Make assistant button visible by default (do not gate on scroll)
+  useEffect(() => {
+    setIsVisible(true)
+  }, [])
+
+  // Track scroll position to determine if we're in hero section or footer section
   useEffect(() => {
     const handleScroll = () => {
-      const heroHeight = window.innerHeight * 0.8
-      setIsVisible(window.scrollY > heroHeight)
+      const scrollY = window.scrollY
+      const windowHeight = window.innerHeight
+      const documentHeight = document.documentElement.scrollHeight
+      
+      // Consider hero section as the first 80% of viewport height
+      const inHero = scrollY < windowHeight * 0.8
+      setIsInHeroSection(inHero)
+      
+      // Try to find the footer element first, then fallback to percentage
+      const footerElement = document.querySelector('footer') || 
+                           document.querySelector('[class*="footer"]') ||
+                           document.querySelector('[id*="footer"]')
+      let inFooter = false
+      
+      if (footerElement) {
+        const footerRect = footerElement.getBoundingClientRect()
+        const footerTop = scrollY + footerRect.top
+        const viewportBottom = scrollY + windowHeight
+        
+        // Consider in footer if we're within 300px of the footer (more generous)
+        inFooter = viewportBottom > footerTop - 300
+      } else {
+        // Fallback: Consider footer section as the last 20% of the page
+        const footerThreshold = documentHeight - windowHeight * 0.2
+        inFooter = scrollY > footerThreshold
+      }
+      
+      setIsInFooterSection(inFooter)
+      
+      // Debug logging (uncomment for debugging)
+      // console.log('Scroll Debug:', {
+      //   scrollY,
+      //   windowHeight,
+      //   documentHeight,
+      //   inHero,
+      //   inFooter,
+      //   shouldShow: !inHero && !inFooter,
+      //   footerElement: !!footerElement
+      // })
     }
 
-    window.addEventListener('scroll', handleScroll)
+    // Initial check
     handleScroll()
 
-    return () => window.removeEventListener('scroll', handleScroll)
+    // Add scroll listener
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+    }
   }, [])
 
   // Listen for call end events from other assistants and page navigation
   useEffect(() => {
     const handleCallEnded = (event: CustomEvent) => {
-      if (event.detail.source !== 'homepage-assistant' && isConnected) {
+      if (event.detail.source !== 'homepage' && isConnected) {
         logger.info('📞 Call ended by another assistant, cleaning up...')
         // Reset states when another assistant ends the call
         setIsConnected(false)
@@ -122,7 +184,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
         try {
           vapiRef.current.stop()
         } catch (err) {
-          console.error('Error stopping VAPI on page unload:', err)
+          logger.error('Error stopping VAPI on page unload:', err)
         }
         vapiRef.current.removeAllListeners()
         vapiRef.current = null
@@ -160,8 +222,8 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
         return
       }
 
-      if (!configWorkflowId) {
-        setError('Workflow ID not found. Please add VITE_VAPI_WORKFLOW_ID to your .env file')
+      if (!configWorkflowId && !configAssistantId) {
+        setError('Workflow or Assistant ID not found. Set VITE_VAPI_VIDEO_WORKFLOW_ID (or VITE_VAPI_WORKFLOW_ID) in .env')
         return
       }
 
@@ -189,7 +251,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
         })
 
         vapiRef.current.on('call-end', () => {
-          console.log('📞 Call ended by VAPI')
+          logger.info('📞 Call ended by VAPI')
           setIsConnected(false)
           setIsLoading(false)
           setIsSpeaking(false)
@@ -204,7 +266,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
         })
 
         vapiRef.current.on('speech-start', (data: any) => {
-          console.log('🎤 Speech started:', data)
+          logger.debug('🎤 Speech started:', data)
           if (data.role === 'assistant') {
             setIsSpeaking(true)
             setIsListening(false)
@@ -216,7 +278,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
         })
 
         vapiRef.current.on('speech-end', (data: any) => {
-          console.log('🔇 Speech ended:', data)
+          logger.debug('🔇 Speech ended:', data)
           if (data.role === 'assistant') {
             setIsSpeaking(false)
             setIsListening(true)
@@ -229,13 +291,13 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
 
         // Alternative event listeners for better compatibility
         vapiRef.current.on('user-speech-start', () => {
-          console.log('🎤 User started speaking (alternative)')
+          logger.debug('🎤 User started speaking (alternative)')
           setIsListening(false)
           setStatusMessage('You are speaking...')
         })
 
         vapiRef.current.on('user-speech-end', () => {
-          console.log('🔇 User finished speaking (alternative)')
+          logger.debug('🔇 User finished speaking (alternative)')
           setIsListening(true)
           setStatusMessage('I\'m listening...')
         })
@@ -261,8 +323,8 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
         })
 
         vapiRef.current.on('error', (error: any) => {
-          console.error('❌ VAPI Error:', error)
-          console.error('❌ VAPI Error Details:', JSON.stringify(error, null, 2))
+          logger.error('❌ VAPI Error:', error)
+          logger.error('❌ VAPI Error Details:', JSON.stringify(error, null, 2))
           
           let errorMessage = 'Unknown VAPI error'
           if (error.errorMsg) {
@@ -294,7 +356,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
         logger.info('✅ VAPI initialized successfully')
 
       } catch (err: any) {
-        console.error('Failed to initialize VAPI:', err)
+        logger.error('Failed to initialize VAPI:', err)
         setError(`Failed to initialize VAPI: ${err.message}`)
         setStatusMessage('Failed to initialize. Please check your configuration.')
       }
@@ -311,7 +373,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
             vapiRef.current.stop()
           }
         } catch (err) {
-          console.error('Error during cleanup:', err)
+          logger.error('Error during cleanup:', err)
         }
         vapiRef.current.removeAllListeners()
         vapiRef.current = null
@@ -325,8 +387,8 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
       return
     }
 
-    if (!configWorkflowId) {
-      setError('Workflow ID is missing. Please check your .env file.')
+    if (!configWorkflowId && !configAssistantId) {
+      setError('Workflow ID or Assistant ID is missing. Please check your .env file.')
       return
     }
 
@@ -344,14 +406,37 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
       // Prevent audio feedback before starting call
       await preventAudioFeedback()
       
-      logger.info('🚀 Starting VAPI call with workflow ID:', configWorkflowId)
-      
-      // Use the correct VAPI start method format
-      await vapiRef.current.start(configWorkflowId)
+      logger.info('🚀 Starting VAPI call with:', { workflowId: configWorkflowId, assistantId: configAssistantId })
+
+      // Try multiple start signatures to support SDK variations
+      const tryStartSequence = [] as Array<() => Promise<any>>
+      if (configAssistantId) {
+        tryStartSequence.push(() => vapiRef.current.start(configAssistantId))
+        tryStartSequence.push(() => vapiRef.current.start({ assistant: { id: configAssistantId } }))
+      }
+      if (configWorkflowId) {
+        tryStartSequence.push(() => vapiRef.current.start(configWorkflowId))
+        tryStartSequence.push(() => vapiRef.current.start({ assistant: { workflow: { id: configWorkflowId } } }))
+      }
+      if (tryStartSequence.length === 0) throw new Error('Missing workflow/assistant id')
+
+      let started = false
+      let lastError: any = null
+      for (const startAttempt of tryStartSequence) {
+        try {
+          await startAttempt()
+          started = true
+          break
+        } catch (e) {
+          lastError = e
+          logger.warn('Start attempt failed, trying next signature...', e)
+        }
+      }
+      if (!started) throw lastError || new Error('Failed to start VAPI call')
       
     } catch (err: any) {
-      console.error('Failed to start call:', err)
-      console.error('Start call error details:', JSON.stringify(err, null, 2))
+      logger.error('Failed to start call:', err)
+      logger.error('Start call error details:', JSON.stringify(err, null, 2))
       setError(`Failed to start call: ${err.message || err.errorMsg || 'Unknown error'}`)
       setIsLoading(false)
       setStatusMessage('Failed to start call. Please try again.')
@@ -404,7 +489,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
       }
       
     } catch (err) {
-      console.error('❌ Error stopping VAPI call:', err)
+      logger.error('❌ Error stopping VAPI call:', err)
       // Continue with cleanup even if stop fails
     } finally {
       // Always perform cleanup
@@ -430,7 +515,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
         logger.info('✅ Call cleanup completed successfully')
         
       } catch (cleanupErr) {
-        console.error('❌ Error during cleanup:', cleanupErr)
+        logger.error('❌ Error during cleanup:', cleanupErr)
         // Force reset states even if cleanup fails
         setIsConnected(false)
         setIsLoading(false)
@@ -455,7 +540,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
         setStatusMessage(newMutedState ? 'Microphone muted' : 'Microphone active')
         addMessage('system', newMutedState ? 'Microphone muted' : 'Microphone unmuted')
       } catch (err) {
-        console.error('Error toggling mute:', err)
+        logger.error('Error toggling mute:', err)
       }
     }
   }
@@ -472,13 +557,14 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
 
   return (
     <>
+
       {/* Floating Button */}
       <motion.div 
         className={`fixed ${getPositionClasses()} z-50`}
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ 
-          opacity: isVisible ? 1 : 0,
-          scale: isVisible ? 1 : 0.8,
+          opacity: isVisible && !isInHeroSection && !isInFooterSection ? 1 : 0,
+          scale: isVisible && !isInHeroSection && !isInFooterSection ? 1 : 0.8,
           y: [0, -12, 0]
         }}
         transition={{ 
@@ -490,7 +576,7 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
             ease: "easeInOut"
           }
         }}
-        style={{ pointerEvents: isVisible ? 'auto' : 'none' }}
+        style={{ pointerEvents: isVisible && !isInHeroSection && !isInFooterSection ? 'auto' : 'none' }}
       >
         <motion.button
           onClick={() => setIsOpen(!isOpen)}
@@ -522,24 +608,8 @@ const VAPIAssistant: React.FC<VAPIAssistantProps> = ({
               }}
             />
             <div className="absolute inset-0 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500" style={{ display: 'none' }}></div>
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/40 via-purple-500/40 to-pink-500/40"></div>
-            
-            {/* Status Icon Overlay */}
-            {isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
-                <Loader2 className="w-7 h-7 text-white animate-spin drop-shadow-lg" />
-              </div>
-            )}
-            {isConnected && !isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
-                <div className="w-7 h-7 rounded-full bg-green-500 animate-pulse" />
-              </div>
-            )}
-            {error && !isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
-                <div className="w-7 h-7 rounded-full bg-red-500" />
-              </div>
-            )}
+            {/* Gradient overlay - always present when button is visible */}
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/40 via-purple-500/40 to-pink-500/40 transition-opacity duration-300"></div>
           </div>
           
           {/* Pulse effect when connected */}

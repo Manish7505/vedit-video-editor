@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { logger } from '../utils/logger';
 import { 
   Plus, 
   FolderOpen, 
@@ -77,7 +78,7 @@ const Dashboard: React.FC = () => {
         setStats(statsResponse.data.data.stats);
       }
     } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
+      logger.error('Failed to fetch dashboard data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -127,7 +128,7 @@ const Dashboard: React.FC = () => {
         window.location.href = `/editor/${response.data.data.project._id}`;
       }
     } catch (error) {
-      console.error('Failed to create project:', error);
+      logger.error('Failed to create project:', error);
     }
   };
 

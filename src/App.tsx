@@ -27,7 +27,7 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 function App() {
-  const publishableKey = "pk_test_Y2FyZWZ1bC1tb2xlLTEuY2xlcmsuYWNjb3VudHMuZGV2JA"
+  const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string
 
   if (!publishableKey) {
     throw new Error("Missing Publishable Key")

@@ -2,14 +2,9 @@
 import axios from 'axios'
 import { logger } from '../utils/logger';
 
-// Dynamic API URL based on environment
-const API_URL = import.meta.env.VITE_API_URL || 
-  (import.meta.env.DEV ? 'http://localhost:8080/api' : '/api');
+// Dynamic API URL: prefer env override; otherwise use relative path so Vite proxy works in dev
+const API_URL = (import.meta.env.VITE_API_URL && String(import.meta.env.VITE_API_URL).trim()) || '/api'
 
-interface BackendAIMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
 
 interface BackendAIResponse {
   message: string;
@@ -65,7 +60,7 @@ class BackendAIService {
       logger.debug('📊 AI availability check result:', isConnected ? 'CONNECTED' : 'DISCONNECTED');
       return isConnected;
     } catch (error) {
-      console.error('❌ AI service availability check failed:', error);
+      logger.error('❌ AI service availability check failed:', error);
       this.isConnected = false;
       this.lastConnectionCheck = Date.now();
       return false;
@@ -123,7 +118,7 @@ class BackendAIService {
       
       return isConnected;
     } catch (error) {
-      console.error('❌ Connection test failed:', error);
+      logger.error('❌ Connection test failed:', error);
       
       if (this.connectionAttempts >= this.maxConnectionAttempts) {
         logger.warn('🔄 Max connection attempts reached, resetting counter');
@@ -149,7 +144,7 @@ class BackendAIService {
       logger.debug('💬 Chat response received:', response.data);
       return response.data.data;
     } catch (error: any) {
-      console.error('❌ Backend AI chat failed:', error);
+      logger.error('❌ Backend AI chat failed:', error);
       throw new Error(error.response?.data?.message || 'Failed to get AI chat response');
     }
   }
@@ -172,7 +167,7 @@ class BackendAIService {
       logger.debug('🎬 Command analysis response:', response.data);
       return response.data.data;
     } catch (error: any) {
-      console.error('❌ Backend AI command execution failed:', error);
+      logger.error('❌ Backend AI command execution failed:', error);
       throw new Error(error.response?.data?.message || 'Failed to execute AI command');
     }
   }
@@ -193,7 +188,7 @@ class BackendAIService {
       logger.debug('💡 Suggestions response:', response.data);
       return response.data.data;
     } catch (error: any) {
-      console.error('❌ Backend AI suggestions failed:', error);
+      logger.error('❌ Backend AI suggestions failed:', error);
       throw new Error(error.response?.data?.message || 'Failed to get AI suggestions');
     }
   }
@@ -237,7 +232,7 @@ class BackendAIService {
           logger.error('❌ AI service connection failed');
         }
       } catch (error) {
-        console.error('❌ Debug connection error:', error);
+        logger.error('❌ Debug connection error:', error);
       }
       logger.debug('🔍 === End Debug ===');
     }
@@ -258,7 +253,7 @@ class BackendAIService {
       }
       return null;
     } catch (error) {
-      console.error('Failed to get service info:', error);
+      logger.error('Failed to get service info:', error);
       return null;
     }
   }

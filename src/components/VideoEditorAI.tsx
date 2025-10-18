@@ -17,10 +17,9 @@ import toast from 'react-hot-toast'
 
 interface VideoEditorAIProps {
   isOpen: boolean
-  isInSidebar?: boolean
 }
 
-const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = false }) => {
+const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -82,15 +81,20 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
   // Check OpenRouter connection on mount
   useEffect(() => {
     const checkConnection = async () => {
-      if (backendAIService.isAvailable()) {
-        try {
-          const isConnected = await backendAIService.testConnection()
-          setConnectionStatus(isConnected ? 'connected' : 'disconnected')
-        } catch (error) {
-          console.error('OpenRouter connection test failed:', error)
-          setConnectionStatus('disconnected')
+      try {
+        logger.debug('🔍 Initial AI connection check...')
+        logger.debug('🔍 API URL:', import.meta.env.VITE_API_URL)
+        logger.debug('🔍 Backend AI service available:', backendAIService.isAvailable())
+        
+        const isConnected = await backendAIService.testConnection()
+        logger.debug('🔍 Initial connection result:', isConnected)
+        setConnectionStatus(isConnected ? 'connected' : 'disconnected')
+        
+        if (!isConnected) {
+          logger.warn('⚠️ AI connection failed, will retry...')
         }
-      } else {
+      } catch (error) {
+        logger.error('❌ OpenRouter connection test failed:', error)
         setConnectionStatus('disconnected')
       }
     }
@@ -141,7 +145,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           // AI connection failed
         }
       } catch (error) {
-        console.error('❌ AI connection error:', error)
+        logger.error('❌ AI connection error:', error)
         setConnectionStatus('disconnected')
         
         if (retryCount < 2) {
@@ -180,7 +184,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           }
         }
       } catch (error) {
-        console.error('❌ Periodic connection check failed:', error)
+        logger.error('❌ Periodic connection check failed:', error)
         setConnectionStatus('disconnected')
       }
     }, 15000) // Check every 15 seconds
@@ -202,7 +206,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
         recognitionRef.current.start()
         addMessage('system', 'Listening...')
       } catch (error) {
-        console.error('Failed to start speech recognition:', error)
+        logger.error('Failed to start speech recognition:', error)
         setIsListening(false)
         toast.error('Failed to start speech recognition. Please try again.')
       }
@@ -248,13 +252,17 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
         } else if (analysis.action === 'multi_task') {
           return analysis.message
         } else if (analysis.confidence && analysis.confidence > 0.7) {
-          const result = await executeVideoAction(analysis, targetClip)
+          const result = await executeVideoAction({
+            action: analysis.action || 'unknown',
+            message: analysis.message || 'Action completed',
+            data: analysis.data
+          }, targetClip)
           return analysis.message + (result ? `\n\n${result}` : '')
         } else {
           return analysis.message || 'I\'m not sure how to do that. Could you be more specific?'
         }
       } catch (error) {
-        console.error('AI processing failed:', error)
+        logger.error('AI processing failed:', error)
         toast.error('AI processing failed. Falling back to basic mode.')
         // Fall back to basic processing
       }
@@ -271,7 +279,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
     }
   }
 
-  async function executeVideoAction(analysis: any, targetClip: any): Promise<string> {
+  async function executeVideoAction(analysis: { action: string; message: string; data?: any }, targetClip: { id: string; name: string; type: string }): Promise<string> {
     const { action, data } = analysis
 
     try {
@@ -511,16 +519,16 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           return `I understand you want to ${action}, but I need more specific instructions.`
       }
     } catch (error) {
-      console.error('Error executing video action:', error)
+      logger.error('Error executing video action:', error)
       return 'Sorry, I encountered an error while processing your request.'
     }
   }
 
-  async function processBasicCommand(command: string, targetClip: any): Promise<string> {
+  async function processBasicCommand(command: string, targetClip: { id: string; name: string; type: string } | undefined): Promise<string> {
     const lowerCommand = command.toLowerCase()
 
     // Enhanced clip selection - try multiple strategies
-    let workingClip = targetClip
+    let workingClip: { id: string; name: string; type: string } | undefined = targetClip
     if (!workingClip && clips.length > 0) {
       // Try to find a clip at current time
       workingClip = clips.find(c => currentTime >= c.startTime && currentTime <= c.endTime)
@@ -715,29 +723,29 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
       if (lowerCommand.includes('increase') || lowerCommand.includes('up')) {
         // Find and update all video/audio elements
         const mediaElements = document.querySelectorAll('video, audio')
-        mediaElements.forEach((element: any) => {
-          element.volume = Math.min(1, value / 100)
+        mediaElements.forEach((element: Element) => {
+          (element as HTMLVideoElement | HTMLAudioElement).volume = Math.min(1, value / 100)
         })
         // Volume increased
         return `✅ Increased volume to ${value}%`
       } else if (lowerCommand.includes('decrease') || lowerCommand.includes('down')) {
         const mediaElements = document.querySelectorAll('video, audio')
-        mediaElements.forEach((element: any) => {
-          element.volume = Math.min(1, value / 100)
+        mediaElements.forEach((element: Element) => {
+          (element as HTMLVideoElement | HTMLAudioElement).volume = Math.min(1, value / 100)
         })
         // Volume decreased
         return `✅ Decreased volume to ${value}%`
       } else if (lowerCommand.includes('mute')) {
         const mediaElements = document.querySelectorAll('video, audio')
-        mediaElements.forEach((element: any) => {
-          element.muted = true
+        mediaElements.forEach((element: Element) => {
+          (element as HTMLVideoElement | HTMLAudioElement).muted = true
         })
         // Audio muted
         return `✅ Muted all audio`
       } else if (lowerCommand.includes('unmute')) {
         const mediaElements = document.querySelectorAll('video, audio')
-        mediaElements.forEach((element: any) => {
-          element.muted = false
+        mediaElements.forEach((element: Element) => {
+          (element as HTMLVideoElement | HTMLAudioElement).muted = false
         })
         // Audio unmuted
         return `✅ Unmuted all audio`
@@ -794,9 +802,9 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
 
     // Apply commands - Handle "Apply [effect]" patterns
     if (lowerCommand.includes('apply')) {
-      if (!targetClip) return 'No clip selected to apply effects'
+      if (!workingClip) return 'No clip selected to apply effects'
       
-      const videoElement = document.querySelector(`[data-clip-id="${targetClip.id}"] video`) as HTMLVideoElement
+      const videoElement = document.querySelector(`[data-clip-id="${workingClip.id}"] video`) as HTMLVideoElement
       if (!videoElement) {
         const anyVideo = document.querySelector('video') as HTMLVideoElement
         if (anyVideo) {
@@ -807,7 +815,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
       }
       
       function applyEffectToElement(element: HTMLVideoElement, command: string) {
-        const currentFilters = (targetClip as any).filters || {}
+        const currentFilters = (workingClip as any).filters || {}
         let filterString = ''
         let effectName = ''
         
@@ -837,9 +845,9 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           currentFilters.cool = true
         }
         
-        if (filterString) {
+        if (filterString && workingClip) {
           // Update the clip with new filters
-          updateClip(targetClip.id, {
+          updateClip(workingClip.id, {
             filters: currentFilters
           })
           
@@ -847,7 +855,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           element.style.filter = filterString
           
           toast.success(`Applied ${effectName} effect`)
-          return `✅ Applied ${effectName} effect to "${targetClip.name}"`
+          return `✅ Applied ${effectName} effect to "${workingClip.name}"`
         }
       }
       
@@ -868,9 +876,9 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
         lowerCommand.includes('blur') || lowerCommand.includes('sepia') || lowerCommand.includes('grayscale') ||
         lowerCommand.includes('vintage') || lowerCommand.includes('warm') || lowerCommand.includes('cool') ||
         lowerCommand.includes('invert') || lowerCommand.includes('old')) {
-      if (!targetClip) return 'No clip selected to apply effects'
+      if (!workingClip) return 'No clip selected to apply effects'
       
-      const videoElement = document.querySelector(`[data-clip-id="${targetClip.id}"] video`) as HTMLVideoElement
+      const videoElement = document.querySelector(`[data-clip-id="${workingClip.id}"] video`) as HTMLVideoElement
       if (!videoElement) {
         // Try finding any video element
         const anyVideo = document.querySelector('video') as HTMLVideoElement
@@ -882,7 +890,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
       }
       
       function applyEffectToElement(element: HTMLVideoElement, command: string) {
-        const currentFilters = (targetClip as any).filters || {}
+        const currentFilters = (workingClip as any).filters || {}
         let filterString = ''
         let effectName = ''
         
@@ -924,13 +932,15 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
           
           element.style.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) ${filterString}`
           
-          updateClip(targetClip.id, {
-            ...targetClip,
-            filters: currentFilters
-          } as any)
-          
-          toast.success(`Applied ${effectName} effect`)
-          return `✅ Applied ${effectName} effect to "${targetClip.name}"`
+          if (workingClip) {
+            updateClip(workingClip.id, {
+              ...workingClip,
+              filters: currentFilters
+            } as any)
+            
+            toast.success(`Applied ${effectName} effect`)
+            return `✅ Applied ${effectName} effect to "${workingClip.name}"`
+          }
         }
       }
       
@@ -1101,7 +1111,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
     // Status command
     if (lowerCommand.includes('status') || lowerCommand.includes('current state')) {
       const clipInfo = workingClip ? `Selected: "${workingClip.name}" (${workingClip.type})` : 'No clip selected'
-      const filtersInfo = workingClip?.filters ? Object.keys(workingClip.filters).join(', ') : 'No filters applied'
+      const filtersInfo = (workingClip as any)?.filters ? Object.keys((workingClip as any).filters).join(', ') : 'No filters applied'
       return `📊 **Current Status**\n\n• Clips: ${clips.length} total\n• ${clipInfo}\n• Current time: ${currentTime.toFixed(1)}s\n• Duration: ${duration.toFixed(1)}s\n• Playback: ${isPlaying ? 'Playing' : 'Paused'}\n• Speed: ${playbackRate}x\n• Filters: ${filtersInfo}\n• AI Mode: ${aiEnabled ? (connectionStatus === 'connected' ? 'AI Powered' : 'Basic Mode') : 'Disabled'}`
     }
 
@@ -1133,7 +1143,7 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
       }
 
       recognitionRef.current.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error)
+        logger.error('Speech recognition error:', event.error)
         setIsListening(false)
         
         // Handle specific error types
@@ -1175,10 +1185,10 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
   }, [processCommand, addMessage])
 
   // Helper functions for video editing actions
-  const adjustBrightness = async (targetClip: any, value: number): Promise<string> => {
+  const adjustBrightness = async (targetClip: { id: string; name: string; type: string; filters?: { brightness?: number; contrast?: number; saturation?: number } }, value: number): Promise<string> => {
     if (!targetClip) return 'No clip selected to adjust brightness'
     
-    const currentFilters = (targetClip as any).filters || {}
+    const currentFilters = targetClip.filters || {}
     const currentBrightness = currentFilters.brightness || 100
     const newBrightness = Math.min(200, Math.max(0, currentBrightness + value))
     
@@ -1198,10 +1208,10 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
     return `✅ Adjusted brightness to ${newBrightness}%`
   }
 
-  const adjustContrast = async (targetClip: any, value: number): Promise<string> => {
+  const adjustContrast = async (targetClip: { id: string; name: string; type: string; filters?: { brightness?: number; contrast?: number; saturation?: number } }, value: number): Promise<string> => {
     if (!targetClip) return 'No clip selected to adjust contrast'
     
-    const currentFilters = (targetClip as any).filters || {}
+    const currentFilters = targetClip.filters || {}
     const currentContrast = currentFilters.contrast || 100
     const newContrast = Math.min(200, Math.max(0, currentContrast + value))
     
@@ -1246,8 +1256,8 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
 
   const adjustVolume = async (value: number): Promise<string> => {
     const mediaElements = document.querySelectorAll('video, audio')
-    mediaElements.forEach((element: any) => {
-      element.volume = Math.min(1, Math.max(0, value / 100))
+    mediaElements.forEach((element: Element) => {
+      (element as HTMLVideoElement | HTMLAudioElement).volume = Math.min(1, Math.max(0, value / 100))
     })
     toast.success(`Volume set to ${value}%`)
     return `✅ Volume set to ${value}%`
@@ -2283,6 +2293,12 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
                connectionStatus === 'connected' ? 'AI Powered' :
                connectionStatus === 'checking' ? 'Connecting...' : 'AI Enabled'}
             </span>
+            {/* Debug info */}
+            {import.meta.env.DEV && (
+              <div className="text-xs text-gray-500 mt-1">
+                Status: {connectionStatus} | AI: {aiEnabled ? 'ON' : 'OFF'}
+              </div>
+            )}
           </div>
           
           {/* AI Toggle Button */}
@@ -2303,6 +2319,57 @@ const VideoEditorAI: React.FC<VideoEditorAIProps> = ({ isOpen, isInSidebar = fal
               <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
             )}
           </button>
+          
+          {/* Reconnect Button (for debugging) */}
+          {aiEnabled && connectionStatus !== 'connected' && (
+            <button
+              onClick={async () => {
+                setIsConnecting(true)
+                setConnectionStatus('checking')
+                try {
+                  const isConnected = await backendAIService.testConnection()
+                  setConnectionStatus(isConnected ? 'connected' : 'disconnected')
+                  if (isConnected) {
+                    toast.success('AI connection established!')
+                  } else {
+                    toast.error('AI connection failed')
+                  }
+                } catch (error) {
+                  logger.error('Manual connection test failed:', error)
+                  setConnectionStatus('disconnected')
+                  toast.error('AI connection failed')
+                } finally {
+                  setIsConnecting(false)
+                }
+              }}
+              disabled={isConnecting}
+              className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors disabled:opacity-50"
+              title="Reconnect to AI service"
+            >
+              {isConnecting ? 'Connecting...' : 'Reconnect'}
+            </button>
+          )}
+          
+          {/* Debug Test Button (development only) */}
+          {import.meta.env.DEV && (
+            <button
+              onClick={async () => {
+                try {
+                  logger.debug('🧪 Debug test starting...')
+                  await backendAIService.debugConnection()
+                  const info = await backendAIService.getServiceInfo()
+                  logger.debug('🔍 Service Info:', info)
+                  toast.success('Debug info logged to console')
+                } catch (error) {
+                  logger.error('❌ Debug test failed:', error)
+                  toast.error('Debug test failed')
+                }
+              }}
+              className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-white rounded transition-colors"
+            >
+              Debug
+            </button>
+          )}
         </div>
       </div>
 

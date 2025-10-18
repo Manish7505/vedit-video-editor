@@ -188,6 +188,28 @@ export interface Clip {
   content?: string
   waveform?: number[]
   filters?: Record<string, any>
+  // Advanced properties
+  fadeIn?: boolean
+  fadeOut?: boolean
+  audioLevel?: number
+  crop?: { aspectRatio: string }
+  rotation?: number
+  flipHorizontal?: boolean
+  flipVertical?: boolean
+  transition?: string
+  keyframes?: Array<{
+    time: number
+    scale?: number
+    opacity?: number
+    x?: number
+    y?: number
+  }>
+  // Text properties
+  text?: string
+  fontSize?: number
+  color?: string
+  position?: { x: number; y: number }
+  alignment?: string
 }
 
 export interface ChatMessage {

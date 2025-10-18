@@ -13,7 +13,6 @@ import { useVideoEditor } from '../contexts/VideoEditorContext'
 import { vapiSessionManager } from '../services/vapiSessionManager'
 import { Message } from '../types/message'
 import { logger } from '../utils/logger'
-import toast from 'react-hot-toast'
 
 interface VideoEditorVAPIAssistantProps {
   workflowId?: string
@@ -64,27 +63,11 @@ const VideoEditorVAPIAssistant: React.FC<VideoEditorVAPIAssistantProps> = ({
   // Get video editor context (direct subscription)
   const {
     clips,
-    updateClip,
     selectedClipId,
     setSelectedClipId,
-    setIsPlaying,
-    setCurrentTime,
-    currentTime,
-    addClip,
-    removeClip,
-    setPlaybackRate,
-    setZoom,
-    zoom,
-    canUndo,
-    canRedo,
-    undo,
-    redo,
     adjustments,
-    setAdjustments,
     activeFilters,
-    setActiveFilters,
-    activeEffects,
-    setActiveEffects
+    activeEffects
   } = useVideoEditor()
 
   // Ensure a target clip is always selected when clips are present

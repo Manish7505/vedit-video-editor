@@ -1,5 +1,5 @@
-# Use Node.js 18 LTS
-FROM node:18-alpine
+# Use Node.js 22 LTS (required by Vite and package.json)
+FROM node:22-alpine
 
 # Install curl for health checks
 RUN apk add --no-cache curl

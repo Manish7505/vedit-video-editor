@@ -59,3 +59,7 @@ yarn-error.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# Upload directories (user content, not part of code)
+server/uploads/
+uploads/

@@ -1,20 +1,45 @@
+# Dependencies
 node_modules
-npm-debug.log
-.git
-.gitignore
-README.md
+npm-debug.log*
+
+# Build outputs
+dist
+build
+out
+
+# Environment files
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
-dist
-build
-coverage
-.nyc_output
-.cache
+
+# Logs
+logs
+*.log
+
+# Editor directories
 .vscode
 .idea
-*.log
 .DS_Store
-Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Upload directories (user content, not part of code)
+server/uploads/
+uploads/
+
+# Test files
+test/
+tests/
+__tests__/
+
+# Documentation
+README.md
+*.md
+
+# Misc
+.DS_Store
+*.pem

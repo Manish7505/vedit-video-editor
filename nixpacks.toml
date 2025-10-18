@@ -7,7 +7,7 @@ cmds = ["npm ci --omit=dev", "cd server && npm ci --omit=dev"]
 cmds = ["npm run build"]
 
 [start]
-cmd = "npm start"
+cmd = "node start-railway-fixed.cjs"
 
 [variables]
 NODE_ENV = "production"

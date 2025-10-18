@@ -14,7 +14,7 @@
     "production": {
       "variables": {
         "NODE_ENV": "production",
-        "NODE_VERSION": "20"
+        "NODE_VERSION": "22.12.0"
       }
     }
   }

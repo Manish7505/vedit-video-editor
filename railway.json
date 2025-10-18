@@ -13,7 +13,8 @@
   "environments": {
     "production": {
       "variables": {
-        "NODE_ENV": "production"
+        "NODE_ENV": "production",
+        "NODE_VERSION": "20"
       }
     }
   }

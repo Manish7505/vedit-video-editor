@@ -1,0 +1,22 @@
+{
+  "providers": ["node"],
+  "phases": {
+    "setup": {
+      "nixpkgs": ["nodejs_22"],
+      "cmds": ["node --version", "npm --version"]
+    },
+    "install": {
+      "cmds": ["npm ci --omit=dev", "cd server && npm ci --omit=dev"]
+    },
+    "build": {
+      "cmds": ["npm run build"]
+    }
+  },
+  "start": {
+    "cmd": "node start-railway-fixed.cjs"
+  },
+  "variables": {
+    "NODE_ENV": "production",
+    "NODE_VERSION": "22.12.0"
+  }
+}

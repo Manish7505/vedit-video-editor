@@ -2,6 +2,7 @@ providers = ["node"]
 
 [phases.setup]
 nixpkgs = ["nodejs_22"]
+cmds = ["node --version", "npm --version"]
 
 [phases.install]
 cmds = ["npm ci --omit=dev", "cd server && npm ci --omit=dev"]
